@@ -57,6 +57,7 @@ export function createHero(heroType, spawnIndex) {
     healAmount:      heroType.healAmount      ?? 5,
     selfHealRate:    heroType.selfHealRate     ?? 0,
     partyHealRate:   heroType.partyHealRate    ?? 0,
+    curseStacks:     0,   // stacked by Cursed Idol — amplifies all tower damage taken
   }
 }
 
@@ -229,57 +230,86 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       updatedTimers[key] = (updatedTimers[key] ?? toolDef.attackSpeed) + deltaMs
       if (updatedTimers[key] < toolDef.attackSpeed) continue
 
-      // Target: closest hero within range
-      let target = null, closestDist = Infinity
-      for (const h of updatedHeroes) {
-        if (!h.spawned || h.state !== 'moving') continue
-        const d = Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2)
-        if (d <= toolDef.range && d < closestDist) { target = h; closestDist = d }
+      // ── Target selection ────────────────────────────────────────────
+      const inRange = updatedHeroes.filter(h =>
+        h.spawned && h.state === 'moving' &&
+        Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2) <= toolDef.range
+      )
+      if (inRange.length === 0) continue
+
+      const closest = pool => pool.reduce((a, b) =>
+        Math.sqrt((a.col-c)**2+(a.row-r)**2) <= Math.sqrt((b.col-c)**2+(b.row-r)**2) ? a : b
+      )
+
+      let targets
+      if (toolDef.aoeAttack) {
+        // Cave Troll: hit every hero in range at once
+        targets = inRange
+      } else if (toolDef.targetGoldCarriers) {
+        // Shadow Stalker: gold-carriers first, else closest
+        const carriers = inRange.filter(h => h.hasGold)
+        targets = [closest(carriers.length > 0 ? carriers : inRange)]
+      } else if (toolDef.targetFarthest) {
+        // Gargoyle: most advanced hero (highest pathIndex)
+        targets = [inRange.reduce((a, b) => a.pathIndex >= b.pathIndex ? a : b)]
+      } else {
+        // Default: closest hero
+        targets = [closest(inRange)]
       }
 
-      if (target) {
+      updatedTimers[key] = 0
+
+      // ── Apply damage to each target ─────────────────────────────────
+      for (const target of targets) {
         const idx = updatedHeroes.indexOf(target)
-        if (idx >= 0) {
-          const h = updatedHeroes[idx]
-          let dmg = toolDef.damage
-          // Fire resistance (mage, ranger, archmage)
-          if (tileId === TILE.FIRE) dmg = Math.round(dmg * (h.fireResist ?? 1))
-          // Universal damage reduction (champion)
-          dmg = Math.round(dmg * (1 - h.damageReduction))
+        if (idx < 0) continue
+        const h = updatedHeroes[idx]
 
-          const updates = {
-            hp:      h.hp - dmg,
-            // Poison: only applied if hero is not immune
-            poisoned: h.poisoned || (!h.immuneToPoison && (toolDef.poisonOnHit ?? false)),
-            // Slow: only applied if hero is not immune
-            slowed:   h.slowed   || (!h.immuneToSlow   && (toolDef.slowOnHit   ?? false)),
-            slowTimer: (!h.immuneToSlow && toolDef.slowOnHit)
-              ? Math.max(h.slowTimer, 2000)
-              : h.slowTimer,
-          }
-          updatedHeroes[idx] = { ...updatedHeroes[idx], ...updates }
+        let dmg = toolDef.damage
+        // Elemental resistances
+        if (tileId === TILE.FIRE) dmg = Math.round(dmg * (h.fireResist ?? 1))
+        // Flat damage reduction (champion)
+        dmg = Math.round(dmg * (1 - h.damageReduction))
+        // Curse stacks amplify all tower damage (+15% per stack)
+        if (h.curseStacks > 0) dmg = Math.round(dmg * (1 + h.curseStacks * 0.15))
+        // Shadow Stalker double damage vs gold carriers
+        if (toolDef.targetGoldCarriers && h.hasGold) dmg = dmg * 2
 
-          // Death from tower attack
-          if (updatedHeroes[idx].hp <= 0 && updatedHeroes[idx].state === 'moving') {
-            const bonus = updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0
-            goldEarned += updatedHeroes[idx].goldValue + bonus
-            events.push({
-              type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label,
-              gold: updatedHeroes[idx].goldValue + bonus, hadGold: updatedHeroes[idx].hasGold,
-            })
-            updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
-          }
+        // Vampire Bat drain: permanently reduce maxHp
+        const newMaxHp = toolDef.drainOnHit
+          ? Math.max(1, h.maxHp - dmg)
+          : h.maxHp
 
-          updatedTimers[key] = 0
-          events.push({
-            type: 'tower_attack', col: c, row: r,
-            towerType: tileId,   // needed by renderer to pick the right animation
-            heroId: target.id,
-            fromX: c * TILE_SIZE + TILE_SIZE / 2,
-            fromY: r * TILE_SIZE + TILE_SIZE / 2,
-            toX: target.x, toY: target.y,
-          })
+        updatedHeroes[idx] = {
+          ...h,
+          hp:          h.hp - dmg,
+          maxHp:       newMaxHp,
+          curseStacks: toolDef.curseOnHit ? Math.min(3, h.curseStacks + 1) : h.curseStacks,
+          poisoned:    h.poisoned || (!h.immuneToPoison && (toolDef.poisonOnHit ?? false)),
+          slowed:      h.slowed   || (!h.immuneToSlow   && (toolDef.slowOnHit   ?? false)),
+          slowTimer:   (!h.immuneToSlow && toolDef.slowOnHit)
+            ? Math.max(h.slowTimer, 2000) : h.slowTimer,
         }
+
+        // Death check
+        if (updatedHeroes[idx].hp <= 0 && updatedHeroes[idx].state === 'moving') {
+          const bonus = updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0
+          goldEarned += updatedHeroes[idx].goldValue + bonus
+          events.push({
+            type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label,
+            gold: updatedHeroes[idx].goldValue + bonus, hadGold: updatedHeroes[idx].hasGold,
+          })
+          updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
+        }
+
+        events.push({
+          type: 'tower_attack', col: c, row: r,
+          towerType: tileId,
+          heroId:   target.id,
+          fromX: c * TILE_SIZE + TILE_SIZE / 2,
+          fromY: r * TILE_SIZE + TILE_SIZE / 2,
+          toX: target.x, toY: target.y,
+        })
       }
     }
   }

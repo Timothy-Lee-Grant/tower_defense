@@ -1652,6 +1652,351 @@ export function drawAttackEffect(ctx, flash, now) {
 }
 
 
+// Cave Troll: massive hunched green-grey brute, wide sweep arm, tiny red eyes
+export function drawTrollTile(ctx, tx, ty, t) {
+  const cx    = tx + TS / 2
+  const cy    = ty + TS * 0.62
+  const sway  = swing(t, 0.002) * 4
+  const blink = step(t, 6, 400) < 1
+
+  ctx.save()
+  ctx.translate(sway, 0)
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'
+  ctx.beginPath(); ctx.ellipse(cx, cy + 10, 14, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // legs / feet
+  ctx.fillStyle = '#3a5a28'
+  ctx.fillRect(cx - 9, cy + 2, 7, 9); ctx.fillRect(cx + 2, cy + 2, 7, 9)
+  ctx.fillStyle = '#2a4a18'
+  ctx.fillRect(cx - 11, cy + 9, 9, 3); ctx.fillRect(cx + 2,  cy + 9, 9, 3)
+
+  // body — massive hunched torso
+  ctx.fillStyle = '#4a6a30'
+  ctx.fillRect(cx - 13, cy - 14, 26, 18)
+  ctx.fillStyle = '#5a7a38'
+  ctx.fillRect(cx - 12, cy - 13, 24, 15)
+  // belly rolls
+  ctx.fillStyle = '#3a5820'
+  ctx.fillRect(cx - 10, cy - 4, 20, 2); ctx.fillRect(cx - 9, cy - 8, 18, 2)
+  // club arm (right) — raised for swing
+  const swingY = sway * 0.8
+  ctx.fillStyle = '#3a5228'
+  ctx.fillRect(cx + 12, cy - 20 + swingY, 8, 18)  // arm
+  ctx.fillStyle = '#5a4020'
+  ctx.fillRect(cx + 10, cy - 28 + swingY, 12, 10) // club head
+  ctx.fillStyle = '#6a5028'
+  ctx.fillRect(cx + 11, cy - 27 + swingY, 10, 8)
+  // left arm
+  ctx.fillStyle = '#3a5228'
+  ctx.fillRect(cx - 20, cy - 16, 8, 14)
+  ctx.fillStyle = '#4a6230'
+  ctx.fillRect(cx - 22, cy - 4, 9, 7) // fist
+  // claws
+  ctx.fillStyle = '#c8b880'
+  ctx.fillRect(cx - 23, cy - 2, 3, 4); ctx.fillRect(cx - 20, cy - 2, 3, 4); ctx.fillRect(cx - 17, cy - 2, 3, 4)
+
+  // head — big, low, beetled brow
+  ctx.fillStyle = '#4a6a30'
+  ctx.fillRect(cx - 11, cy - 30, 22, 18)
+  ctx.fillStyle = '#5a7a38'
+  ctx.fillRect(cx - 10, cy - 29, 20, 15)
+  // brow ridge
+  ctx.fillStyle = '#2a4a18'
+  ctx.fillRect(cx - 11, cy - 23, 22, 5)
+  // nose
+  ctx.fillStyle = '#3a5a20'
+  ctx.fillRect(cx - 3, cy - 20, 7, 6)
+  // mouth (jagged teeth)
+  ctx.fillStyle = '#1a1a0a'
+  ctx.fillRect(cx - 8, cy - 15, 16, 4)
+  ctx.fillStyle = '#e8e0c0'
+  ctx.fillRect(cx - 7, cy - 15, 3, 3); ctx.fillRect(cx - 1, cy - 15, 3, 3); ctx.fillRect(cx + 5, cy - 15, 3, 3)
+  // eyes
+  ctx.fillStyle = blink ? '#3a5a20' : `rgba(220,40,20,0.9)`
+  ctx.fillRect(cx - 8, cy - 25, 5, 4)
+  ctx.fillRect(cx + 3, cy - 25, 5, 4)
+  if (!blink) {
+    ctx.fillStyle = 'rgba(255,80,20,0.5)'
+    ctx.beginPath(); ctx.arc(cx - 6, cy - 23, 4, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(cx + 5,  cy - 23, 4, 0, Math.PI * 2); ctx.fill()
+  }
+
+  ctx.restore()
+}
+
+
+// Vampire Bat: small, fluttering wings, fangs, glowing red eyes
+export function drawBatTile(ctx, tx, ty, t) {
+  const cx       = tx + TS / 2
+  const cy       = ty + TS * 0.45
+  const wingFlap = swing(t, 0.018) // fast flap
+  const hover    = osc(t, 0.006) * 4 - 2
+  const eyeG     = osc(t, 0.007)
+
+  ctx.save()
+
+  // shadow (below, not directly under since it hovers)
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'
+  ctx.beginPath(); ctx.ellipse(cx, ty + TS * 0.85, 7, 2, 0, 0, Math.PI * 2); ctx.fill()
+
+  // wings (left)
+  ctx.fillStyle = '#2a0a3a'
+  ctx.save()
+  ctx.translate(cx - 6, cy + hover)
+  ctx.rotate(-0.4 + wingFlap * 0.7)
+  ctx.fillRect(-18, -4, 18, 10)
+  ctx.fillRect(-14, -8, 10, 6)
+  // membrane ridges
+  ctx.fillStyle = '#3a1a4a'
+  ctx.fillRect(-16, -3, 2, 8); ctx.fillRect(-11, -4, 2, 9); ctx.fillRect(-6, -3, 2, 8)
+  ctx.restore()
+  // wings (right)
+  ctx.fillStyle = '#2a0a3a'
+  ctx.save()
+  ctx.translate(cx + 6, cy + hover)
+  ctx.rotate(0.4 - wingFlap * 0.7)
+  ctx.fillRect(0, -4, 18, 10)
+  ctx.fillRect(4, -8, 10, 6)
+  ctx.fillStyle = '#3a1a4a'
+  ctx.fillRect(2, -3, 2, 8); ctx.fillRect(7, -4, 2, 9); ctx.fillRect(12, -3, 2, 8)
+  ctx.restore()
+
+  // body
+  ctx.fillStyle = '#1a0828'
+  ctx.beginPath(); ctx.ellipse(cx, cy + hover, 7, 9, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#2a1038'
+  ctx.beginPath(); ctx.ellipse(cx, cy + hover, 5, 7, 0, 0, Math.PI * 2); ctx.fill()
+
+  // head
+  ctx.fillStyle = '#1a0828'
+  ctx.beginPath(); ctx.ellipse(cx, cy - 8 + hover, 7, 6, 0, 0, Math.PI * 2); ctx.fill()
+  // ears (pointed)
+  ctx.fillStyle = '#2a0a3a'
+  ctx.fillRect(cx - 10, cy - 16 + hover, 5, 10)
+  ctx.fillRect(cx + 5,  cy - 16 + hover, 5, 10)
+  ctx.fillStyle = '#8a0a18'
+  ctx.fillRect(cx - 9, cy - 15 + hover, 3, 7)
+  ctx.fillRect(cx + 6, cy - 15 + hover, 3, 7)
+  // eyes — glowing crimson
+  ctx.fillStyle = `rgba(255,20,20,${0.75 + eyeG * 0.25})`
+  ctx.beginPath(); ctx.arc(cx - 3, cy - 9 + hover, 2.5, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 3, cy - 9 + hover, 2.5, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(255,150,100,0.7)'
+  ctx.beginPath(); ctx.arc(cx - 2, cy - 10 + hover, 1, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 4, cy - 10 + hover, 1, 0, Math.PI * 2); ctx.fill()
+  // fangs
+  ctx.fillStyle = '#f0e8e0'
+  ctx.fillRect(cx - 4, cy - 5 + hover, 2, 4)
+  ctx.fillRect(cx + 2, cy - 5 + hover, 2, 4)
+  // blood drop on fang
+  ctx.fillStyle = 'rgba(200,20,20,0.8)'
+  ctx.fillRect(cx - 4, cy - 2 + hover, 2, 2)
+  ctx.fillRect(cx + 2, cy - 2 + hover, 2, 2)
+
+  ctx.restore()
+}
+
+
+// Shadow Stalker: barely-visible dark silhouette, twin glowing violet eyes, wispy tendrils
+export function drawShadowTile(ctx, tx, ty, t) {
+  const cx      = tx + TS / 2
+  const cy      = ty + TS * 0.55
+  const drift   = swing(t, 0.003) * 3
+  const eyeG    = osc(t, 0.005)
+  const tendrils= osc(t, 0.004)
+
+  ctx.save()
+  ctx.translate(drift, 0)
+
+  // outer shadow haze (large, very faint)
+  ctx.fillStyle = `rgba(20,0,40,${0.10 + tendrils * 0.08})`
+  ctx.beginPath(); ctx.ellipse(cx, cy, 20, 22, 0, 0, Math.PI * 2); ctx.fill()
+
+  // tendrils / wisps
+  ctx.fillStyle = `rgba(60,0,80,${0.25 + tendrils * 0.2})`
+  ctx.fillRect(cx - 18, cy + 4, 6, 3)
+  ctx.fillRect(cx + 12, cy + 6, 7, 3)
+  ctx.fillRect(cx - 10, cy + 10, 5, 4)
+  ctx.fillRect(cx + 6, cy + 11, 5, 3)
+  ctx.fillRect(cx - 4, cy + 14, 8, 3)
+
+  // core form — dark and shifting
+  ctx.fillStyle = `rgba(15,0,30,0.85)`
+  ctx.fillRect(cx - 9, cy - 16, 18, 26)
+  ctx.fillStyle = `rgba(30,0,55,0.75)`
+  ctx.fillRect(cx - 7, cy - 18, 14, 26)
+  // inner glow
+  ctx.fillStyle = `rgba(80,0,120,${0.12 + tendrils * 0.14})`
+  ctx.fillRect(cx - 5, cy - 16, 10, 22)
+
+  // clawed arms
+  ctx.fillStyle = 'rgba(20,0,40,0.80)'
+  ctx.fillRect(cx - 18, cy - 10, 10, 6)
+  ctx.fillRect(cx + 8, cy - 10, 10, 6)
+  // claw tips
+  ctx.fillStyle = `rgba(100,0,140,${0.5 + eyeG * 0.4})`
+  ctx.fillRect(cx - 20, cy - 8, 3, 5)
+  ctx.fillRect(cx - 17, cy - 6, 3, 5)
+  ctx.fillRect(cx + 17, cy - 8, 3, 5)
+  ctx.fillRect(cx + 14, cy - 6, 3, 5)
+
+  // head — shrouded, just a dark mass with eyes
+  ctx.fillStyle = 'rgba(10,0,22,0.90)'
+  ctx.beginPath(); ctx.ellipse(cx, cy - 20, 9, 8, 0, 0, Math.PI * 2); ctx.fill()
+  // twin glowing violet eyes
+  ctx.fillStyle = `rgba(180,40,255,${0.70 + eyeG * 0.30})`
+  ctx.beginPath(); ctx.arc(cx - 4, cy - 21, 3, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 4, cy - 21, 3, 0, Math.PI * 2); ctx.fill()
+  // eye glow halos
+  ctx.fillStyle = `rgba(180,40,255,${0.15 + eyeG * 0.18})`
+  ctx.beginPath(); ctx.arc(cx - 4, cy - 21, 7, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 4, cy - 21, 7, 0, Math.PI * 2); ctx.fill()
+  // bright pupils
+  ctx.fillStyle = `rgba(240,180,255,0.9)`
+  ctx.beginPath(); ctx.arc(cx - 4, cy - 22, 1.2, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 4, cy - 22, 1.2, 0, Math.PI * 2); ctx.fill()
+
+  ctx.restore()
+}
+
+
+// Cursed Idol: stone pedestal, glowing eye, orbiting dark rune fragments
+export function drawIdolTile(ctx, tx, ty, t) {
+  const cx     = tx + TS / 2
+  const cy     = ty + TS * 0.65
+  const pulse  = osc(t, 0.005)
+  const orbit  = t * 0.0025
+
+  ctx.save()
+
+  // pedestal base
+  ctx.fillStyle = '#3a2a4a'
+  ctx.fillRect(cx - 12, cy - 2, 24, 10)
+  ctx.fillStyle = '#4a3a5a'
+  ctx.fillRect(cx - 10, cy - 1, 20, 8)
+  // stone cracks
+  ctx.fillStyle = '#2a1a3a'
+  ctx.fillRect(cx - 7, cy + 2, 2, 5)
+  ctx.fillRect(cx + 3, cy + 1, 2, 6)
+
+  // idol body — crude carved stone figure
+  ctx.fillStyle = '#3a2a4a'
+  ctx.fillRect(cx - 7, cy - 18, 14, 18)
+  ctx.fillStyle = '#4a3a5a'
+  ctx.fillRect(cx - 6, cy - 17, 12, 16)
+  // carved rune lines on body
+  ctx.fillStyle = `rgba(150,0,200,${0.30 + pulse * 0.35})`
+  ctx.fillRect(cx - 4, cy - 15, 8, 2)
+  ctx.fillRect(cx - 4, cy - 11, 8, 2)
+  ctx.fillRect(cx - 4, cy - 7, 8, 2)
+
+  // large eye socket
+  ctx.fillStyle = '#1a0a2a'
+  ctx.beginPath(); ctx.ellipse(cx, cy - 26, 9, 7, 0, 0, Math.PI * 2); ctx.fill()
+  // iris
+  ctx.fillStyle = `rgb(${120 + (pulse * 80)|0}, 0, ${180 + (pulse * 75)|0})`
+  ctx.beginPath(); ctx.ellipse(cx, cy - 26, 6, 5, 0, 0, Math.PI * 2); ctx.fill()
+  // pupil
+  ctx.fillStyle = '#0a000f'
+  ctx.beginPath(); ctx.ellipse(cx, cy - 26, 2.5, 3.5, 0, 0, Math.PI * 2); ctx.fill()
+  // eye glow
+  ctx.fillStyle = `rgba(160,0,220,${0.12 + pulse * 0.18})`
+  ctx.beginPath(); ctx.arc(cx, cy - 26, 14, 0, Math.PI * 2); ctx.fill()
+  // highlight
+  ctx.fillStyle = `rgba(220,160,255,${0.6 + pulse * 0.4})`
+  ctx.beginPath(); ctx.arc(cx - 2, cy - 28, 2, 0, Math.PI * 2); ctx.fill()
+
+  // orbiting rune fragments
+  const runes = [0, Math.PI * 0.66, Math.PI * 1.32]
+  runes.forEach((offset, i) => {
+    const a = orbit + offset
+    const rx = cx + Math.cos(a) * 16
+    const ry = (cy - 26) + Math.sin(a) * 10
+    ctx.fillStyle = `rgba(180,60,255,${0.5 + pulse * 0.4})`
+    ctx.fillRect(rx - 2, ry - 2, 4, 4)
+    ctx.fillStyle = `rgba(220,160,255,0.7)`
+    ctx.fillRect(rx - 1, ry - 1, 2, 2)
+  })
+
+  ctx.restore()
+}
+
+
+// Gargoyle: crouched stone creature with wings, perched and watching
+export function drawGargoyleTile(ctx, tx, ty, t) {
+  const cx    = tx + TS / 2
+  const cy    = ty + TS * 0.60
+  const alert = osc(t, 0.003)    // slow breathing / watch
+  const eyeG  = osc(t, 0.006)
+
+  ctx.save()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'
+  ctx.beginPath(); ctx.ellipse(cx, cy + 10, 14, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // folded wings (behind body)
+  ctx.fillStyle = '#3a3848'
+  ctx.fillRect(cx - 20, cy - 22, 10, 26)  // left wing
+  ctx.fillRect(cx + 10, cy - 22, 10, 26)  // right wing
+  ctx.fillStyle = '#2a2838'
+  // wing ribs
+  ctx.fillRect(cx - 19, cy - 20, 2, 22); ctx.fillRect(cx - 15, cy - 20, 2, 22)
+  ctx.fillRect(cx + 17, cy - 20, 2, 22); ctx.fillRect(cx + 13, cy - 20, 2, 22)
+
+  // body — crouched, compact stone
+  ctx.fillStyle = '#5a5868'
+  ctx.fillRect(cx - 10, cy - 18, 20, 22)
+  ctx.fillStyle = '#6a6878'
+  ctx.fillRect(cx - 9, cy - 17, 18, 20)
+  // stone texture lines
+  ctx.fillStyle = '#4a4858'
+  ctx.fillRect(cx - 7, cy - 10, 14, 2)
+  ctx.fillRect(cx - 7, cy - 5, 14, 2)
+  ctx.fillRect(cx - 7, cy,  14, 2)
+
+  // legs / talons
+  ctx.fillStyle = '#5a5868'
+  ctx.fillRect(cx - 9, cy + 3, 7, 8); ctx.fillRect(cx + 2, cy + 3, 7, 8)
+  // talon claws
+  ctx.fillStyle = '#3a3848'
+  ctx.fillRect(cx - 11, cy + 8, 4, 3); ctx.fillRect(cx - 8, cy + 10, 4, 3); ctx.fillRect(cx - 5, cy + 8, 4, 3)
+  ctx.fillRect(cx + 1,  cy + 8, 4, 3); ctx.fillRect(cx + 4, cy + 10, 4, 3); ctx.fillRect(cx + 7, cy + 8, 4, 3)
+
+  // horns
+  ctx.fillStyle = '#3a3848'
+  ctx.fillRect(cx - 10, cy - 28, 4, 12); ctx.fillRect(cx + 6, cy - 28, 4, 12)
+  ctx.fillStyle = '#4a4858'
+  ctx.fillRect(cx - 9,  cy - 26, 2, 9); ctx.fillRect(cx + 7, cy - 26, 2, 9)
+
+  // head — flat, broad, brutish
+  ctx.fillStyle = '#5a5868'
+  ctx.fillRect(cx - 10, cy - 28, 20, 14)
+  ctx.fillStyle = '#6a6878'
+  ctx.fillRect(cx - 9, cy - 27, 18, 12)
+  // snout
+  ctx.fillStyle = '#5a5868'
+  ctx.fillRect(cx - 5, cy - 18, 10, 5)
+  // nostrils
+  ctx.fillStyle = '#3a3848'
+  ctx.fillRect(cx - 4, cy - 16, 3, 2); ctx.fillRect(cx + 1, cy - 16, 3, 2)
+
+  // eyes — watching, green glow
+  ctx.fillStyle = '#1a1828'
+  ctx.fillRect(cx - 8, cy - 26, 6, 5); ctx.fillRect(cx + 2, cy - 26, 6, 5)
+  ctx.fillStyle = `rgba(60,200,80,${0.65 + eyeG * 0.35})`
+  ctx.fillRect(cx - 7, cy - 25, 4, 3); ctx.fillRect(cx + 3, cy - 25, 4, 3)
+  // eye glow
+  ctx.fillStyle = `rgba(60,200,80,${0.08 + alert * 0.10})`
+  ctx.beginPath(); ctx.arc(cx - 5, cy - 24, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(cx + 5, cy - 24, 6, 0, Math.PI * 2); ctx.fill()
+
+  ctx.restore()
+}
+
+
 // ── Sprite maps ──────────────────────────────────────────────────────────────
 
 export const HERO_SPRITES = {
@@ -1670,6 +2015,11 @@ export const TILE_SPRITES = {
   skeleton: drawSkeletonTile,
   slime:    drawSlimeTile,
   wraith:   drawWraithTile,
+  troll:    drawTrollTile,
+  bat:      drawBatTile,
+  shadow:   drawShadowTile,
+  idol:     drawIdolTile,
+  gargoyle: drawGargoyleTile,
   spike:    drawSpike,
   boulder:  drawBoulder,
   door:     drawDoor,

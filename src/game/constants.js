@@ -22,6 +22,12 @@ export const TILE = {
   SKELETON: 'skeleton',
   WRAITH:   'wraith',
   SLIME:    'slime',
+  // Tier 2 monsters
+  TROLL:    'troll',
+  BAT:      'bat',
+  SHADOW:   'shadow',
+  IDOL:     'idol',
+  GARGOYLE: 'gargoyle',
 }
 
 export const TOOL_CATEGORY = {
@@ -190,6 +196,46 @@ export const DUNGEON_TOOLS = [
     placesOn: 'open',
     description: 'Beside path. Long range, ignores armor. Despises paladins in particular.',
     color: '#6a4a8a', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.TROLL, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Cave Troll', emoji: '🧌', cost: 110, damage: 40,
+    range: 2, attackSpeed: 2600, aoeAttack: true,
+    placesOn: 'open',
+    description: 'Beside path. Slow swing, but hits EVERY hero in range at once. Devastating against grouped parties.',
+    color: '#4a6a30', unlocked: true, tier: 1,
+  },
+  {
+    id: TILE.BAT, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Vampire Bat', emoji: '🦇', cost: 55, damage: 12,
+    range: 2, attackSpeed: 550, drainOnHit: true,
+    placesOn: 'open',
+    description: 'Beside path. Rapid bites that permanently drain max HP — sustained healing becomes less effective over time.',
+    color: '#3a1a4a', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.SHADOW, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Shadow Stalker', emoji: '🌑', cost: 80, damage: 22,
+    range: 3, attackSpeed: 1400, targetGoldCarriers: true,
+    placesOn: 'open',
+    description: 'Beside path. Hunts gold-carrying heroes with priority and deals double damage to them on the return trip.',
+    color: '#2a1a3a', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.IDOL, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Cursed Idol', emoji: '👁️', cost: 70, damage: 8,
+    range: 2.5, attackSpeed: 1500, curseOnHit: true,
+    placesOn: 'open',
+    description: 'Beside path. Each hit stacks a Curse (+15% damage taken, max 3 stacks). Makes every other trap far deadlier.',
+    color: '#5a2a6a', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.GARGOYLE, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Gargoyle', emoji: '🗿', cost: 90, damage: 38,
+    range: 4, attackSpeed: 2200, targetFarthest: true,
+    placesOn: 'open',
+    description: 'Beside path. Long range. Always targets the most advanced hero — stops gold carriers dead in their tracks.',
+    color: '#5a5a6a', unlocked: false, tier: 2,
   },
 ]
 
