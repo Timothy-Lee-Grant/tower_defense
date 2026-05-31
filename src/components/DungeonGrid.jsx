@@ -6,8 +6,8 @@ import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS } from '../game/co
 const TILE_COLORS = {
   [TILE.EMPTY]:    { bg: '#16121a', border: '#1e1828' },
   [TILE.WALL]:     { bg: '#2a2035', border: '#3a2f47', label: '▪' },
-  [TILE.ENTRANCE]: { bg: '#0a2a0a', border: '#1a5a1a', label: '⚑', glow: '#1a8a1a' },
-  [TILE.TREASURE]: { bg: '#2a1a00', border: '#8b6a00', label: '★', glow: '#c9a02a' },
+  [TILE.ENTRANCE]: { bg: '#0c0a10', border: '#4a3a60', label: '🚪', glow: '#2d1f40' },
+  [TILE.TREASURE]: { bg: '#1a1000', border: '#c9a02a', label: '💰', glow: '#c9a02a' },
   [TILE.SPIKE]:    { bg: '#1e1e28', border: '#6a6a8a', label: '⋀' },
   [TILE.DART]:     { bg: '#2a1a0a', border: '#8a5a2a', label: '→' },
   [TILE.BOULDER]:  { bg: '#1a1a14', border: '#5a5a48', label: '●' },
@@ -96,7 +96,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           ctx.fillStyle = tileId === TILE.TREASURE ? '#e8c44a'
-            : tileId === TILE.ENTRANCE ? '#1a8a1a' : colors.border
+            : tileId === TILE.ENTRANCE ? '#c8b8e8' : colors.border
           ctx.fillText(colors.label, x + TILE_SIZE / 2, y + TILE_SIZE / 2)
         }
 
