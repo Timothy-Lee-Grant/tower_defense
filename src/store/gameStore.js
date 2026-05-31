@@ -169,9 +169,16 @@ export const useGameStore = create((set, get) => ({
       const ts = performance.now()
       const freshFlashes = result.events
         .filter(e => e.type === 'tower_attack')
-        .map(e => ({ fromX: e.fromX, fromY: e.fromY, toX: e.toX, toY: e.toY, t: ts }))
+        .map(e => ({
+          fromX: e.fromX, fromY: e.fromY,
+          toX: e.toX, toY: e.toY,
+          towerType: e.towerType,
+          tileCol: e.col, tileRow: e.row,
+          t: ts,
+        }))
+      // Keep flashes alive long enough for the longest animation (wraith rush ~700ms)
       const activeFlashes = [
-        ...state.attackFlashes.filter(f => ts - f.t < 250),
+        ...state.attackFlashes.filter(f => ts - f.t < 750),
         ...freshFlashes,
       ]
 

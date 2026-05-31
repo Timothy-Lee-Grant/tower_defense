@@ -242,7 +242,9 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
 
           updatedTimers[key] = 0
           events.push({
-            type: 'tower_attack', col: c, row: r, heroId: target.id,
+            type: 'tower_attack', col: c, row: r,
+            towerType: tileId,   // needed by renderer to pick the right animation
+            heroId: target.id,
             fromX: c * TILE_SIZE + TILE_SIZE / 2,
             fromY: r * TILE_SIZE + TILE_SIZE / 2,
             toX: target.x, toY: target.y,

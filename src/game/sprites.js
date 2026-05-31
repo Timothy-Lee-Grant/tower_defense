@@ -457,16 +457,28 @@ export function drawSlimeTile(ctx, tx, ty, t) {
 }
 
 
-// Wraith tower
-export function drawWraithTile(ctx, tx, ty, t) {
-  const cx    = tx + TS / 2
-  const cy    = ty + TS * 0.52
-  const fl    = swing(t, 0.004) * 6
+// Wraith tower — roams within its tile when idle; rushes to target when attacking
+// rushPos: { x, y } pixel coords when mid-rush; null = idle roaming
+export function drawWraithTile(ctx, tx, ty, t, rushPos = null) {
+  // Idle: drift in a small figure-eight around tile centre using position as seed
+  const seed  = tx * 0.017 + ty * 0.013
+  let cx, cy
+  if (rushPos) {
+    cx = rushPos.x
+    cy = rushPos.y
+  } else {
+    cx = tx + TS / 2 + Math.sin(t * 0.0009 + seed) * 10
+    cy = ty + TS * 0.52 + Math.cos(t * 0.0007 + seed * 1.3) * 8
+  }
+
+  const fl    = swing(t, 0.004) * 5
   const fadeV = osc(t, 0.003)
   const eyeG  = osc(t, 0.005)
+  // Rush: eyes blaze brighter
+  const rushGlow = rushPos ? 1.0 : 0
 
   ctx.save()
-  ctx.translate(cx, cy + fl)
+  ctx.translate(Math.round(cx), Math.round(cy + fl))
   ctx.globalAlpha = 0.55 + fadeV * 0.45
 
   // wispy tail strands
@@ -480,36 +492,36 @@ export function drawWraithTile(ctx, tx, ty, t) {
   // robe body
   ctx.fillStyle = '#3a1e58'
   ctx.fillRect(-12, -18, 24, 30)
-  // inner glow
   ctx.fillStyle = '#5a3278'
   ctx.fillRect(-10, -16, 20, 26)
   ctx.fillStyle = 'rgba(160,100,255,0.12)'
   ctx.fillRect(-7, -14, 14, 20)
 
-  // side cloak drape
+  // cloak
   ctx.fillStyle = 'rgba(80,40,120,0.7)'
-  ctx.fillRect(-18, -12, 6, 20)
-  ctx.fillRect( 12, -12, 6, 20)
-  ctx.fillRect(-22, -8,  4, 14)
-  ctx.fillRect( 18, -8,  4, 14)
+  ctx.fillRect(-18, -12, 6, 20); ctx.fillRect(12, -12, 6, 20)
+  ctx.fillRect(-22, -8, 4, 14); ctx.fillRect(18, -8, 4, 14)
 
   // hood
   ctx.fillStyle = '#2a1240'
-  ctx.fillRect(-12, -30, 24, 14)
-  ctx.fillRect(-10, -34, 20, 6)
-
-  // head / face area
+  ctx.fillRect(-12, -30, 24, 14); ctx.fillRect(-10, -34, 20, 6)
   ctx.fillStyle = '#3e1e5e'
   ctx.fillRect(-9, -28, 18, 12)
 
-  // glowing eyes
-  const ea = 0.65 + eyeG * 0.35
-  ctx.fillStyle = `rgba(255,80,255,${ea})`
+  // glowing eyes — blaze during rush
+  const ea = 0.65 + eyeG * 0.35 + rushGlow * 0.4
+  ctx.fillStyle = `rgba(255,${80 - rushGlow * 40|0},255,${ea})`
   ctx.beginPath(); ctx.ellipse(-5, -24, 4.5, 4.5, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse( 5, -24, 4.5, 4.5, 0, 0, Math.PI * 2); ctx.fill()
   ctx.fillStyle = `rgba(255,200,255,0.85)`
-  ctx.beginPath(); ctx.ellipse(-5, -25, 2,   2,   0, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.ellipse( 5, -25, 2,   2,   0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(-5, -25, 2, 2, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse( 5, -25, 2, 2, 0, 0, Math.PI * 2); ctx.fill()
+
+  // Rush impact flash around whole sprite
+  if (rushPos) {
+    ctx.fillStyle = 'rgba(180,80,255,0.12)'
+    ctx.beginPath(); ctx.ellipse(0, -10, 20, 30, 0, 0, Math.PI * 2); ctx.fill()
+  }
 
   ctx.restore()
 }
@@ -886,6 +898,251 @@ export function drawIce(ctx, tx, ty, t) {
   ctx.arc(cx, cy, 16 + glow * 3, 0, Math.PI * 2)
   ctx.stroke()
   ctx.setLineDash([])
+}
+
+
+// ── Attack Animation System ──────────────────────────────────────────────────
+//
+// Each tower type has its own visual attack style:
+//   dart     → needle projectile with trail
+//   fire     → glowing fireball with flame trail
+//   ice      → spinning crystal with sparkle trail
+//   poison   → slow wobbly blob
+//   slime    → bouncing green glob
+//   skeleton → melee sword arc (stays at tile, no projectile)
+//   wraith   → handled entirely by drawWraithTile(rushPos) — no extra effect
+
+// How long (ms) each attack animation runs
+export const ATTACK_DURATIONS = {
+  dart:     230,
+  fire:     360,
+  ice:      310,
+  poison:   600,
+  slime:    370,
+  skeleton: 430,
+  wraith:   700,   // rush-to-target + return
+}
+
+// Easing helpers
+const easeOut2 = t => 1 - (1 - t) * (1 - t)
+const easeIn2  = t => t * t
+
+// Wraith rush position: call each frame to get where the wraith should be drawn
+// Returns { x, y } pixel position, or null if the flash has expired
+export function wraithRushPos(flash, now) {
+  const age      = now - flash.t
+  const duration = ATTACK_DURATIONS.wraith
+  if (age >= duration) return null
+
+  const progress = age / duration
+  const OUTWARD  = 0.40   // 0–40 % → rush out
+  const eOut = easeOut2
+  const eIn  = easeIn2
+
+  if (progress < OUTWARD) {
+    const p = eOut(progress / OUTWARD)
+    return {
+      x: flash.fromX + (flash.toX - flash.fromX) * p,
+      y: flash.fromY + (flash.toY - flash.fromY) * p,
+    }
+  } else {
+    const p = eIn((progress - OUTWARD) / (1 - OUTWARD))
+    return {
+      x: flash.toX + (flash.fromX - flash.toX) * p,
+      y: flash.toY + (flash.fromY - flash.toY) * p,
+    }
+  }
+}
+
+// Main dispatch — call once per active flash each frame
+export function drawAttackEffect(ctx, flash, now) {
+  const { towerType, fromX, fromY, toX, toY } = flash
+  const age      = now - flash.t
+  const duration = ATTACK_DURATIONS[towerType] ?? 400
+  if (age >= duration || age < 0) return
+
+  const progress = age / duration                         // 0 → 1
+  const angle    = Math.atan2(toY - fromY, toX - fromX)
+
+  // Lerp helpers (eased)
+  const px = (p) => fromX + (toX - fromX) * p
+  const py = (p) => fromY + (toY - fromY) * p
+
+  ctx.save()
+
+  switch (towerType) {
+
+    // ── Dart: thin needle with trailing feathers ────────────────────────────
+    case 'dart': {
+      const p   = easeOut2(progress)
+      const cx  = px(p), cy = py(p)
+      // Feather trail
+      ctx.globalAlpha = 0.35 * (1 - progress)
+      ctx.fillStyle = '#c8a040'
+      for (let i = 1; i <= 3; i++) {
+        const tp = Math.max(0, p - i * 0.09)
+        ctx.beginPath(); ctx.arc(px(tp), py(tp), 2 - i * 0.4, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 1
+      // Shaft
+      ctx.translate(cx, cy); ctx.rotate(angle)
+      ctx.fillStyle = '#7a5020'
+      ctx.fillRect(-10, -1.5, 18, 3)
+      // Flights (back)
+      ctx.fillStyle = '#c8a040'
+      ctx.fillRect(-10, -3.5, 5, 3)
+      ctx.fillRect(-10,  0.5, 5, 3)
+      // Metal tip (front)
+      ctx.fillStyle = '#c8c8d8'
+      ctx.beginPath()
+      ctx.moveTo(8, 0); ctx.lineTo(4, -3); ctx.lineTo(4, 3); ctx.closePath(); ctx.fill()
+      break
+    }
+
+    // ── Fire: expanding fireball with flame trail ───────────────────────────
+    case 'fire': {
+      const p   = easeOut2(progress)
+      const cx  = px(p), cy = py(p)
+      const sz  = 6 + Math.sin(age * 0.025) * 1.5
+      // Trailing glow blobs
+      for (let i = 1; i <= 4; i++) {
+        const tp = Math.max(0, p - i * 0.07)
+        ctx.globalAlpha = (1 - progress) * 0.28 * (1 - i * 0.22)
+        ctx.fillStyle = i < 3 ? '#ff8800' : '#ff4400'
+        ctx.beginPath(); ctx.arc(px(tp), py(tp), sz - i, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 1
+      // Outer glow
+      ctx.fillStyle = `rgba(255,160,0,${0.28 * (1 - progress)})`
+      ctx.beginPath(); ctx.arc(cx, cy, sz + 6, 0, Math.PI * 2); ctx.fill()
+      // Core
+      ctx.fillStyle = '#ff6600'
+      ctx.beginPath(); ctx.arc(cx, cy, sz, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#ffcc00'
+      ctx.beginPath(); ctx.arc(cx, cy, sz - 3, 0, Math.PI * 2); ctx.fill()
+      break
+    }
+
+    // ── Ice: spinning diamond crystal with sparkle trail ───────────────────
+    case 'ice': {
+      const p   = easeOut2(progress)
+      const cx  = px(p), cy = py(p)
+      const spin = age * 0.012
+      // Sparkle trail
+      for (let i = 1; i <= 4; i++) {
+        const tp = Math.max(0, p - i * 0.08)
+        ctx.globalAlpha = (1 - progress) * 0.22
+        ctx.fillStyle = '#a8d8ff'
+        const sp = Math.sin(tp * 5 + i) * 3
+        ctx.fillRect(px(tp) - 2 + sp, py(tp) - 2, 4, 4)
+      }
+      ctx.globalAlpha = 1
+      ctx.translate(cx, cy); ctx.rotate(spin + angle)
+      // Diamond body
+      ctx.fillStyle = `rgba(140,210,255,${0.9 - progress * 0.25})`
+      ctx.beginPath()
+      ctx.moveTo(0, -9); ctx.lineTo(6, 0); ctx.lineTo(0, 9); ctx.lineTo(-6, 0); ctx.closePath()
+      ctx.fill()
+      // Inner highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'
+      ctx.fillRect(-1.5, -4, 3, 8)
+      // Cold glow
+      ctx.fillStyle = 'rgba(100,180,255,0.2)'
+      ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.fill()
+      break
+    }
+
+    // ── Poison: slow drifting blob with vapour wisps ───────────────────────
+    case 'poison': {
+      const p       = progress          // no easing — deliberately slow & linear
+      const wobX    = Math.sin(age * 0.018) * 4
+      const wobY    = Math.cos(age * 0.013) * 3
+      const cx      = px(p) + wobX
+      const cy      = py(p) + wobY
+      // Vapour trail
+      for (let i = 1; i <= 5; i++) {
+        const tp = Math.max(0, p - i * 0.06)
+        ctx.globalAlpha = 0.12 * (1 - i * 0.18)
+        ctx.fillStyle = '#70c030'
+        ctx.beginPath(); ctx.arc(px(tp), py(tp), 9, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 0.88 - progress * 0.2
+      // Blob
+      const blobSpin = age * 0.004
+      ctx.fillStyle = '#3d8010'
+      ctx.beginPath(); ctx.ellipse(cx, cy, 10, 8, blobSpin, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#70c020'
+      ctx.beginPath(); ctx.ellipse(cx - 2, cy - 2, 6, 5, blobSpin, 0, Math.PI * 2); ctx.fill()
+      // Tiny skull
+      ctx.fillStyle = 'rgba(10,30,5,0.55)'
+      ctx.fillRect(cx - 4, cy - 5, 8, 6)
+      ctx.fillRect(cx - 3, cy - 7, 6, 3)
+      break
+    }
+
+    // ── Slime: bouncy glob that squishes in flight ─────────────────────────
+    case 'slime': {
+      const p      = easeOut2(progress)
+      const cx     = px(p), cy = py(p)
+      const bounce = Math.sin(progress * Math.PI * 4) * 0.35  // wobble
+      ctx.translate(cx, cy); ctx.rotate(angle)
+      // Core
+      ctx.fillStyle = `rgba(45,170,15,${0.9 - progress * 0.15})`
+      ctx.beginPath(); ctx.ellipse(0, 0, 9 + bounce * 4, 9 - bounce * 4, 0, 0, Math.PI * 2); ctx.fill()
+      // Highlight
+      ctx.fillStyle = 'rgba(140,255,80,0.55)'
+      ctx.beginPath(); ctx.ellipse(-2, -2, 5, 4, -0.3, 0, Math.PI * 2); ctx.fill()
+      // Mini drip tail
+      ctx.fillStyle = 'rgba(30,150,10,0.4)'
+      ctx.beginPath(); ctx.ellipse(-9, 0, 5, 3, 0, 0, Math.PI * 2); ctx.fill()
+      break
+    }
+
+    // ── Skeleton: melee sword arc — stays at tile, no travel ──────────────
+    case 'skeleton': {
+      const swingPeak = Math.sin(progress * Math.PI)   // 0 → 1 → 0
+      ctx.translate(fromX, fromY - 10)
+
+      // Sword arc sweep
+      ctx.strokeStyle = `rgba(200,195,188,${swingPeak * 0.88})`
+      ctx.lineWidth   = 3.5
+      ctx.lineCap     = 'round'
+      ctx.beginPath()
+      ctx.arc(0, 0, 24, angle - 0.72, angle + 0.72)
+      ctx.stroke()
+
+      // Blade glint along arc
+      const gx = Math.cos(angle) * 24, gy = Math.sin(angle) * 24
+      ctx.fillStyle = `rgba(230,228,248,${swingPeak * 0.55})`
+      ctx.fillRect(gx - 1, gy - 10, 2, 20)
+
+      // Impact flash at tip
+      if (swingPeak > 0.48) {
+        const ia = (swingPeak - 0.48) / 0.52
+        ctx.fillStyle = `rgba(255,248,200,${ia * 0.72})`
+        ctx.beginPath(); ctx.arc(gx, gy, 7, 0, Math.PI * 2); ctx.fill()
+        // Sparks
+        for (let i = 0; i < 4; i++) {
+          const sa = angle + (i - 1.5) * 0.45
+          const sd = 10 + ia * 8
+          ctx.fillStyle = `rgba(255,220,100,${ia * 0.6})`
+          ctx.fillRect(
+            gx + Math.cos(sa) * sd - 1,
+            gy + Math.sin(sa) * sd - 1,
+            2.5, 2.5
+          )
+        }
+      }
+      break
+    }
+
+    // Wraith: drawn by drawWraithTile(rushPos) — no extra canvas effect here
+    case 'wraith':
+    default:
+      break
+  }
+
+  ctx.restore()
 }
 
 

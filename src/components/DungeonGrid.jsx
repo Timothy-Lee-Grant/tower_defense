@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS } from '../game/constants.js'
-import { HERO_SPRITES, TILE_SPRITES } from '../game/sprites.js'
+import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
 
 // ── Tile base colors (bg fill + border drawn under every tile) ──
 // Sprite tiles get subtle floor-colored bases; the sprite draws its own art on top.
@@ -53,7 +53,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const t = performance.now()
+    const t   = performance.now()
+    const now = t   // alias used by attack animation helpers
 
     const currentGrid    = gridRef.current
     const currentHeroes  = heroesRef.current
@@ -106,21 +107,42 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     }
 
     // ── 2. Tile sprites (traps / towers / monsters) ───────────────────────────
-    // Clipped to each tile so animated sprites can't bleed onto neighbours.
+    // Wraith tiles are skipped here and drawn separately (they roam outside
+    // their tile bounds and rush across the map during attacks).
+    // Wraith rush positions are computed from active attack flashes.
+
+    const wraithFlashes = currentFlashes.filter(f => f.towerType === 'wraith' && now - f.t < ATTACK_DURATIONS.wraith)
+    const wraithRushMap = new Map()   // "tileCol,tileRow" → { x, y }
+    for (const flash of wraithFlashes) {
+      const pos = wraithRushPos(flash, now)
+      if (pos) wraithRushMap.set(`${flash.tileCol},${flash.tileRow}`, pos)
+    }
+
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
         const tileId = currentGrid[row][col]
         const drawFn = TILE_SPRITES[tileId]
         if (!drawFn) continue
+        if (tileId === 'wraith') continue  // drawn in step 2b
 
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
-
         ctx.save()
-        ctx.beginPath()
-        ctx.rect(x, y, TILE_SIZE, TILE_SIZE)
-        ctx.clip()
+        ctx.beginPath(); ctx.rect(x, y, TILE_SIZE, TILE_SIZE); ctx.clip()
         drawFn(ctx, x, y, t)
+        ctx.restore()
+      }
+    }
+
+    // ── 2b. Wraith sprites — drawn unclipped so they can roam + rush freely ──
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        if (currentGrid[row][col] !== 'wraith') continue
+        const x      = col * TILE_SIZE
+        const y      = row * TILE_SIZE
+        const rushP  = wraithRushMap.get(`${col},${row}`) ?? null
+        ctx.save()
+        TILE_SPRITES.wraith(ctx, x, y, t, rushP)
         ctx.restore()
       }
     }
@@ -170,22 +192,9 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
     }
 
-    // ── 5. Attack flash lines (tower → hero) ──────────────────────────────────
-    const now = performance.now()
+    // ── 5. Attack animations (projectiles, sword arcs, etc.) ──────────────────
     for (const flash of currentFlashes) {
-      const alpha = Math.max(0, 1 - (now - flash.t) / 250)
-      if (alpha <= 0) continue
-      ctx.save()
-      ctx.globalAlpha = alpha * 0.75
-      ctx.strokeStyle = '#e8d060'
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([5, 4])
-      ctx.beginPath()
-      ctx.moveTo(flash.fromX, flash.fromY)
-      ctx.lineTo(flash.toX,   flash.toY)
-      ctx.stroke()
-      ctx.setLineDash([])
-      ctx.restore()
+      drawAttackEffect(ctx, flash, now)
     }
 
     // ── 6. Hero sprites ───────────────────────────────────────────────────────
