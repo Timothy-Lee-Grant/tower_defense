@@ -780,6 +780,115 @@ export function drawPoison(ctx, tx, ty, t) {
 }
 
 
+// ── Lava Floor — seething magma with bubble pops ─────────────────────────────
+
+export function drawLava(ctx, tx, ty, t) {
+  const cx  = tx + TS / 2
+  const cy  = ty + TS / 2
+  const sc  = t * 0.0005    // slow drift
+  const b1  = osc(t, 0.007)
+  const b2  = osc(t + 600,  0.009)
+  const b3  = osc(t + 1300, 0.006)
+
+  // Base — deep magma
+  ctx.fillStyle = '#3a0800'
+  ctx.fillRect(tx, ty, TS, TS)
+
+  // Lava flow layers
+  ctx.fillStyle = `rgba(160,30,0,0.85)`
+  ctx.beginPath()
+  ctx.ellipse(cx + Math.sin(sc) * 6,      cy + 4,  18, 12, sc * 0.5,  0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgba(220,80,0,0.75)`
+  ctx.beginPath()
+  ctx.ellipse(cx + Math.cos(sc * 1.3) * 8, cy - 2, 14, 10, sc * 0.8, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgba(255,140,0,0.55)`
+  ctx.beginPath()
+  ctx.ellipse(cx + Math.sin(sc * 0.7) * 4, cy,    10,  8, 0,         0, Math.PI * 2); ctx.fill()
+
+  // Bright cracks
+  ctx.strokeStyle = `rgba(255,180,0,${0.4 + b1 * 0.5})`
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(tx + 6, ty + 8); ctx.lineTo(tx + 18, ty + 22); ctx.lineTo(tx + 28, ty + 16)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(tx + 30, ty + 10); ctx.lineTo(tx + 42, ty + 28); ctx.lineTo(tx + 36, ty + 42)
+  ctx.stroke()
+
+  // Bubble pops
+  const bubbles = [
+    { bx: cx - 8, by: cy + 6, ph: 0       },
+    { bx: cx + 10, by: cy - 4, ph: 2.1    },
+    { bx: cx + 2,  by: cy + 12, ph: 4.2   },
+  ]
+  for (const { bx, by, ph } of bubbles) {
+    const bp = (t * 0.003 + ph) % (Math.PI * 2)
+    const br = 2.5 + Math.sin(bp) * 1.5
+    if (Math.sin(bp) > 0.6) {
+      ctx.fillStyle = `rgba(255,200,50,${0.3 + Math.sin(bp) * 0.5})`
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+
+  // Dark vignette edge
+  ctx.strokeStyle = '#200400'
+  ctx.lineWidth = 2
+  ctx.strokeRect(tx + 1, ty + 1, TS - 2, TS - 2)
+}
+
+
+// ── Ice Shard Tower — crystalline formation with cold glow ────────────────────
+
+export function drawIce(ctx, tx, ty, t) {
+  const cx   = tx + TS / 2
+  const cy   = ty + TS / 2
+  const glow = osc(t, 0.004)
+  const crk  = osc(t + 500, 0.006)
+
+  // Cold glow background
+  ctx.fillStyle = `rgba(30,80,140,${0.15 + glow * 0.15})`
+  ctx.fillRect(tx, ty, TS, TS)
+
+  // Stone base
+  ctx.fillStyle = '#181828'
+  ctx.fillRect(tx + 4, ty + 32, TS - 8, TS - 34)
+  ctx.fillStyle = '#222238'
+  ctx.fillRect(tx + 6, ty + 34, TS - 12, 6)
+
+  // Ice crystal cluster — draw as stacked triangles (using rects + rotation)
+  const drawCrystal = (ox, oy, w, h, tilt) => {
+    ctx.save()
+    ctx.translate(cx + ox, cy + oy)
+    ctx.rotate(tilt)
+    // Crystal body
+    ctx.fillStyle = `rgba(140,200,255,${0.75 + crk * 0.2})`
+    ctx.fillRect(-w / 2, -h, w, h)
+    // Facet highlight
+    ctx.fillStyle = `rgba(220,240,255,0.6)`
+    ctx.fillRect(-w / 2 + 2, -h + 2, w / 2 - 2, h - 4)
+    // Tip glint
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + glow * 0.5})`
+    ctx.fillRect(-1, -h, 2, 4)
+    ctx.restore()
+  }
+
+  drawCrystal(0,  -2, 10, 22, 0)          // centre tall crystal
+  drawCrystal(-9, 4,  7,  14, -0.25)      // left short
+  drawCrystal( 9, 4,  7,  14,  0.25)      // right short
+  drawCrystal(-5, 1,  6,  10, -0.1)       // small left
+  drawCrystal( 5, 1,  6,  10,  0.1)       // small right
+
+  // Snowflake / cold pulse ring
+  ctx.strokeStyle = `rgba(150,210,255,${0.2 + glow * 0.35})`
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 4])
+  ctx.beginPath()
+  ctx.arc(cx, cy, 16 + glow * 3, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+
+
 // ── Sprite maps ──────────────────────────────────────────────────────────────
 
 export const HERO_SPRITES = {
@@ -799,4 +908,6 @@ export const TILE_SPRITES = {
   dart:     drawDartTower,
   fire:     drawFire,
   poison:   drawPoison,
+  lava:     drawLava,
+  ice:      drawIce,
 }

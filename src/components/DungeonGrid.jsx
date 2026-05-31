@@ -21,6 +21,8 @@ const TILE_COLORS = {
   [TILE.SKELETON]: { bg: '#16121a', border: '#221820' },
   [TILE.SLIME]:    { bg: '#0c1408', border: '#161e0c' },
   [TILE.WRAITH]:   { bg: '#100c18', border: '#1c1428' },
+  [TILE.LAVA]:     { bg: '#200400', border: '#3a0800' },
+  [TILE.ICE]:      { bg: '#08101e', border: '#10182e' },
 }
 
 export default function DungeonGrid({ onTileClick, onTileRightClick }) {
@@ -195,6 +197,14 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
       ctx.save()
       if (hero.state === 'escaped') ctx.globalAlpha = 0.35
+
+      // Ice slow — faint blue aura ring
+      if (hero.slowed) {
+        const iceAlpha = 0.3 + 0.2 * Math.sin(t * 0.015)
+        ctx.strokeStyle = `rgba(100,180,255,${iceAlpha})`
+        ctx.lineWidth = 2.5
+        ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.stroke()
+      }
 
       if (drawHero) {
         drawHero(ctx, x, y, t, hero)

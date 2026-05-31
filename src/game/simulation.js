@@ -1,15 +1,21 @@
 // ── Hero Simulation Engine ──
-// Heroes follow the fixed PATH_TILES centerline in order (index 0 → last).
-// The path is a LOOP:
-//   • index 0          = entrance  (spawn point)
-//   • midpoint tile    = TREASURE  (hero picks up gold, keeps moving)
-//   • index last       = entrance  (hero has escaped with the gold)
 //
-// Off-path towers scan for heroes within their range each tick and attack.
-// On-path traps fire when a hero steps onto their tile.
+// Path is a LOOP: entrance → treasure (gold pickup) → entrance (escape).
+// Heroes only truly escape when they complete the full loop.
+//
+// Per-tick order:
+//   1. Spawn countdown
+//   2. Status effects (poison DoT, slow timer, lava DoT)
+//   3. Paladin heal
+//   4. Movement along PATH_TILES
+//   5. On-arrival tile checks (treasure pickup, on-path traps)
+//   6. Death check
+//   7. Off-path tower range attacks (second full pass)
 
 import {
-  TILE, TILE_SIZE, HERO_KILL_GOLD, TREASURE_HERO_DAMAGE,
+  TILE, TILE_SIZE,
+  HERO_KILL_GOLD, GOLD_CARRYING_BONUS,
+  TREASURE_HERO_DAMAGE, HERO_SPAWN_STAGGER_MS,
   PATH_TILES, DUNGEON_TOOLS,
 } from './constants.js'
 
@@ -17,30 +23,33 @@ import {
 
 export function createHero(heroType, spawnIndex) {
   return {
-    id:         `hero_${Date.now()}_${spawnIndex}`,
-    type:       heroType.id,
-    label:      heroType.label,
-    emoji:      heroType.emoji,
-    color:      heroType.color,
-    hp:         heroType.hp,
-    maxHp:      heroType.hp,
-    speed:      heroType.speed,
-    canDisarm:  heroType.canDisarm,
-    heals:      heroType.heals,
-    fireResist: heroType.fireResist ?? 1,
-    // Path position — starts at first path tile (entrance)
-    col:        PATH_TILES[0].col,
-    row:        PATH_TILES[0].row,
-    x:          PATH_TILES[0].col * TILE_SIZE + TILE_SIZE / 2,
-    y:          PATH_TILES[0].row * TILE_SIZE + TILE_SIZE / 2,
-    pathIndex:  0,
-    // Status
-    state:      'moving',   // moving | dead | escaped
-    poisoned:   false,
-    hasGold:    false,      // true after hero reaches the treasure tile
-    spawnDelay: spawnIndex * 1200,
-    spawned:    false,
-    goldValue:  HERO_KILL_GOLD[heroType.id] ?? 30,
+    id:             `hero_${Date.now()}_${spawnIndex}`,
+    type:           heroType.id,
+    label:          heroType.label,
+    emoji:          heroType.emoji,
+    color:          heroType.color,
+    hp:             heroType.hp,
+    maxHp:          heroType.hp,
+    speed:          heroType.speed,
+    canDisarm:      heroType.canDisarm,
+    heals:          heroType.heals,
+    fireResist:     heroType.fireResist ?? 1,
+    goldSpeedMult:  heroType.goldSpeedMult ?? 1,
+    // Pixel/grid position — starts at entrance (PATH_TILES[0])
+    col:            PATH_TILES[0].col,
+    row:            PATH_TILES[0].row,
+    x:              PATH_TILES[0].col * TILE_SIZE + TILE_SIZE / 2,
+    y:              PATH_TILES[0].row * TILE_SIZE + TILE_SIZE / 2,
+    pathIndex:      0,
+    // State
+    state:          'moving',   // moving | dead | escaped
+    poisoned:       false,
+    slowed:         false,
+    slowTimer:      0,          // ms of slow remaining
+    hasGold:        false,
+    spawnDelay:     spawnIndex * HERO_SPAWN_STAGGER_MS,
+    spawned:        false,
+    goldValue:      HERO_KILL_GOLD[heroType.id] ?? 30,
   }
 }
 
@@ -53,26 +62,43 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
   let goldEarned     = 0
   const updatedHeroes = []
 
-  // ── Pass 1: move every hero along the path ──────────────────────────────
+  // ── Pass 1: hero movement and status effects ───────────────────────────
   for (let hero of heroes) {
     if (hero.state === 'dead' || hero.state === 'escaped') {
       updatedHeroes.push(hero)
       continue
     }
 
-    // Spawn delay countdown
+    // Spawn countdown
     if (!hero.spawned) {
       hero = { ...hero, spawnDelay: hero.spawnDelay - deltaMs }
       if (hero.spawnDelay > 0) { updatedHeroes.push(hero); continue }
       hero = { ...hero, spawned: true, spawnDelay: 0 }
     }
 
-    // Poison damage-over-time (3 HP/s)
+    // ── Status effects ──
+
+    // Slow timer countdown
+    if (hero.slowed) {
+      const newTimer = hero.slowTimer - deltaMs
+      hero = newTimer > 0
+        ? { ...hero, slowTimer: newTimer }
+        : { ...hero, slowed: false, slowTimer: 0 }
+    }
+
+    // Poison DoT — 3 HP/s
     if (hero.poisoned) {
       hero = { ...hero, hp: hero.hp - 3 * (deltaMs / 1000) }
     }
 
-    // Paladin heals adjacent allies already in updatedHeroes
+    // Lava DoT — 15 HP/s while standing on a LAVA tile
+    const curTileId = grid[hero.row]?.[hero.col]
+    if (curTileId === TILE.LAVA) {
+      hero = { ...hero, hp: hero.hp - 15 * (deltaMs / 1000) }
+      events.push({ type: 'lava_damage', heroId: hero.id })
+    }
+
+    // Paladin passive heal — 5 HP/s to adjacent allies already queued
     if (hero.heals) {
       for (const other of updatedHeroes) {
         const d = Math.abs(other.col - hero.col) + Math.abs(other.row - hero.row)
@@ -83,30 +109,31 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
     }
 
     // ── Movement ──
+
     const nextTile = PATH_TILES[hero.pathIndex + 1]
 
     if (!nextTile) {
-      // Already at the very last tile (entrance / escape point)
+      // Already at the last tile (entrance = escape point)
       events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold })
-      hero = { ...hero, state: 'escaped' }
-      updatedHeroes.push(hero)
+      updatedHeroes.push({ ...hero, state: 'escaped' })
       continue
     }
 
-    const targetX  = nextTile.col * TILE_SIZE + TILE_SIZE / 2
-    const targetY  = nextTile.row * TILE_SIZE + TILE_SIZE / 2
-    const dx       = targetX - hero.x
-    const dy       = targetY - hero.y
-    const dist     = Math.sqrt(dx * dx + dy * dy)
+    const targetX = nextTile.col * TILE_SIZE + TILE_SIZE / 2
+    const targetY = nextTile.row * TILE_SIZE + TILE_SIZE / 2
+    const dx      = targetX - hero.x
+    const dy      = targetY - hero.y
+    const dist    = Math.sqrt(dx * dx + dy * dy)
 
-    // Iron Door slows the hero while they stand on it
-    const curTileId = grid[hero.row]?.[hero.col]
-    const doorDef   = curTileId === TILE.DOOR ? DUNGEON_TOOLS.find(t => t.id === TILE.DOOR) : null
-    const speedMult = doorDef?.slow ?? 1
-    const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000) * speedMult
+    // Speed modifiers stack multiplicatively
+    const doorSlow   = curTileId === TILE.DOOR
+      ? (DUNGEON_TOOLS.find(t => t.id === TILE.DOOR)?.slow ?? 1) : 1
+    const goldMult   = hero.hasGold ? hero.goldSpeedMult : 1
+    const slowMult   = hero.slowed  ? 0.5 : 1
+    const moveSpeed  = hero.speed * TILE_SIZE * (deltaMs / 1000) * doorSlow * goldMult * slowMult
 
     if (dist <= moveSpeed) {
-      // ── Arrived at nextTile ──
+      // Arrived at next path tile
       hero = {
         ...hero,
         x: targetX, y: targetY,
@@ -114,38 +141,34 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         pathIndex: hero.pathIndex + 1,
       }
 
-      // Check the tile we just stepped onto
-      const arrivedTileId = grid[nextTile.row]?.[nextTile.col]
+      const arrivedId = grid[nextTile.row]?.[nextTile.col]
 
-      // Gold pickup — happens exactly once when the hero first reaches TREASURE
-      if (arrivedTileId === TILE.TREASURE && !hero.hasGold) {
+      // Gold pickup — fires exactly once
+      if (arrivedId === TILE.TREASURE && !hero.hasGold) {
         hero = { ...hero, hasGold: true }
         treasureDamage += TREASURE_HERO_DAMAGE
         events.push({ type: 'treasure_reached', hero: hero.id, label: hero.label })
-        // Hero keeps moving — does NOT escape here
       }
 
-      // On-path trap interaction (spike, boulder)
+      // On-path trap interactions
       if (
-        arrivedTileId &&
-        arrivedTileId !== TILE.PATH   &&
-        arrivedTileId !== TILE.ENTRANCE &&
-        arrivedTileId !== TILE.TREASURE &&
-        arrivedTileId !== TILE.DOOR
+        arrivedId &&
+        arrivedId !== TILE.PATH     &&
+        arrivedId !== TILE.ENTRANCE &&
+        arrivedId !== TILE.TREASURE &&
+        arrivedId !== TILE.DOOR
       ) {
-        const result = handleOnPathTrap(hero, arrivedTileId, nextTile, events)
+        const result = handleOnPathTrap(hero, arrivedId, nextTile, events)
         hero = result.hero
       }
 
-      // Escape check — hero completes the full loop back to entrance
+      // Escape check — completed the full loop
       if (hero.pathIndex >= PATH_TILES.length - 1) {
         events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold })
-        hero = { ...hero, state: 'escaped' }
-        updatedHeroes.push(hero)
+        updatedHeroes.push({ ...hero, state: 'escaped' })
         continue
       }
     } else {
-      // Still moving toward next tile
       hero = {
         ...hero,
         x: hero.x + (dx / dist) * moveSpeed,
@@ -153,17 +176,22 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       }
     }
 
-    // Death from poison DoT (or trap damage applied above)
+    // Death check (poison DoT, lava, or trap damage)
     if (hero.hp <= 0 && hero.state === 'moving') {
-      hero = { ...hero, state: 'dead', hp: 0 }
-      goldEarned += hero.goldValue
-      events.push({ type: 'hero_killed', hero: hero.id, label: hero.label, gold: hero.goldValue })
+      const bonus = hero.hasGold ? GOLD_CARRYING_BONUS : 0
+      goldEarned += hero.goldValue + bonus
+      events.push({
+        type: 'hero_killed', hero: hero.id, label: hero.label,
+        gold: hero.goldValue + bonus, hadGold: hero.hasGold,
+      })
+      updatedHeroes.push({ ...hero, state: 'dead', hp: 0 })
+      continue
     }
 
     updatedHeroes.push(hero)
   }
 
-  // ── Pass 2: off-path tower range attacks ─────────────────────────────────
+  // ── Pass 2: off-path tower range attacks ───────────────────────────────
   const updatedTimers = { ...trapTimers }
 
   for (let r = 0; r < grid.length; r++) {
@@ -173,18 +201,15 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       if (!toolDef) continue
 
       const key = `tower_${c},${r}`
-      // Advance cooldown; initialise to full attackSpeed so first shot is immediate
       updatedTimers[key] = (updatedTimers[key] ?? toolDef.attackSpeed) + deltaMs
       if (updatedTimers[key] < toolDef.attackSpeed) continue
 
-      // Pick closest hero in range
+      // Target: closest hero within range
       let target = null, closestDist = Infinity
       for (const h of updatedHeroes) {
         if (!h.spawned || h.state !== 'moving') continue
-        const tileDist = Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2)
-        if (tileDist <= toolDef.range && tileDist < closestDist) {
-          target = h; closestDist = tileDist
-        }
+        const d = Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2)
+        if (d <= toolDef.range && d < closestDist) { target = h; closestDist = d }
       }
 
       if (target) {
@@ -192,20 +217,26 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         if (idx >= 0) {
           let dmg = toolDef.damage
           // Mage fire resistance
-          if (tileId === TILE.FIRE && updatedHeroes[idx].fireResist !== undefined) {
-            dmg = Math.round(dmg * updatedHeroes[idx].fireResist)
-          }
+          if (tileId === TILE.FIRE) dmg = Math.round(dmg * (updatedHeroes[idx].fireResist ?? 1))
 
-          updatedHeroes[idx] = {
-            ...updatedHeroes[idx],
+          const updates = {
             hp:      updatedHeroes[idx].hp - dmg,
-            poisoned: updatedHeroes[idx].poisoned || (toolDef.poisonOnHit ?? false),
+            poisoned: updatedHeroes[idx].poisoned || (toolDef.poisonOnHit  ?? false),
+            slowed:   updatedHeroes[idx].slowed   || (toolDef.slowOnHit    ?? false),
+            slowTimer: toolDef.slowOnHit
+              ? Math.max(updatedHeroes[idx].slowTimer, 2000)
+              : updatedHeroes[idx].slowTimer,
           }
+          updatedHeroes[idx] = { ...updatedHeroes[idx], ...updates }
 
-          // Death from tower hit
+          // Death from tower attack
           if (updatedHeroes[idx].hp <= 0 && updatedHeroes[idx].state === 'moving') {
-            goldEarned += updatedHeroes[idx].goldValue
-            events.push({ type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label, gold: updatedHeroes[idx].goldValue })
+            const bonus = updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0
+            goldEarned += updatedHeroes[idx].goldValue + bonus
+            events.push({
+              type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label,
+              gold: updatedHeroes[idx].goldValue + bonus, hadGold: updatedHeroes[idx].hasGold,
+            })
             updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
           }
 
@@ -241,6 +272,7 @@ function handleOnPathTrap(hero, tileId, tilePos, events) {
       events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
       return { hero: { ...hero, hp: hero.hp - 60 } }
     }
+    // LAVA damage is handled per-tick above, not on arrival
     default:
       return { hero }
   }
