@@ -55,6 +55,8 @@ export function createHero(heroType, spawnIndex) {
     immuneToPoison:  heroType.immuneToPoison  ?? false,
     damageReduction: heroType.damageReduction ?? 0,
     healAmount:      heroType.healAmount      ?? 5,
+    selfHealRate:    heroType.selfHealRate     ?? 0,
+    partyHealRate:   heroType.partyHealRate    ?? 0,
   }
 }
 
@@ -105,7 +107,22 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       events.push({ type: 'lava_damage', heroId: hero.id })
     }
 
-    // Healer passive — HP/s to adjacent allies already queued (rate from healAmount)
+    // Self-regen (mage, archmage)
+    if (hero.selfHealRate > 0 && hero.hp < hero.maxHp) {
+      hero = { ...hero, hp: Math.min(hero.maxHp, hero.hp + hero.selfHealRate * (deltaMs / 1000)) }
+    }
+
+    // Soft party heal (mage, archmage) — slight aura for adjacent allies
+    if (hero.partyHealRate > 0) {
+      for (const other of updatedHeroes) {
+        const d = Math.abs(other.col - hero.col) + Math.abs(other.row - hero.row)
+        if (d <= 1 && other.state === 'moving' && other.hp < other.maxHp) {
+          other.hp = Math.min(other.maxHp, other.hp + hero.partyHealRate * (deltaMs / 1000))
+        }
+      }
+    }
+
+    // Dedicated healer passive — strong party healing (paladin, cleric)
     if (hero.heals) {
       const rate = hero.healAmount ?? 5
       for (const other of updatedHeroes) {
