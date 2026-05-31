@@ -36,9 +36,16 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const showPathPreview = useGameStore(s => s.showPathPreview)
   const previewedPaths  = useGameStore(s => s.previewedPaths)
 
-  const hoveredTile = useRef(null)
-  const animFrame   = useRef(null)
-  const timeRef     = useRef(0)
+  const hoveredTile    = useRef(null)
+  const animFrame      = useRef(null)
+  const timeRef        = useRef(0)
+  // Refs for rapidly-changing state so the draw loop doesn't restart on every frame
+  const heroesRef      = useRef(heroes)
+  const gridRef        = useRef(grid)
+  const previewRef     = useRef(previewedPaths)
+  heroesRef.current    = heroes
+  gridRef.current      = grid
+  previewRef.current   = previewedPaths
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -49,10 +56,15 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+    // Read from refs so this loop never needs to restart mid-wave
+    const currentGrid    = gridRef.current
+    const currentHeroes  = heroesRef.current
+    const currentPaths   = previewRef.current
+
     // ── Draw tiles ──
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
-        const tileId = grid[row][col]
+        const tileId = currentGrid[row][col]
         const colors = TILE_COLORS[tileId] ?? TILE_COLORS[TILE.EMPTY]
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
@@ -105,8 +117,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     }
 
     // ── Draw path previews ──
-    if (showPathPreview && previewedPaths) {
-      Object.entries(previewedPaths).forEach(([heroId, path]) => {
+    if (showPathPreview && currentPaths) {
+      Object.entries(currentPaths).forEach(([heroId, path]) => {
         if (!path || path.length < 2) return
         ctx.save()
         ctx.strokeStyle = PATH_COLORS[heroId] ?? 'rgba(200,200,200,0.4)'
@@ -126,7 +138,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     }
 
     // ── Draw heroes ──
-    for (const hero of heroes) {
+    for (const hero of currentHeroes) {
       if (!hero.spawned || hero.state === 'dead') continue
       const { x, y, hp, maxHp, color, emoji } = hero
 
@@ -173,7 +185,10 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     }
 
     animFrame.current = requestAnimationFrame(draw)
-  }, [grid, heroes, phase, selectedTool, showPathPreview, previewedPaths])
+  // grid, heroes, previewedPaths are read via refs — no need to restart the loop on every update.
+  // Only restart when phase or tool selection changes (plan ↔ wave transitions, hover style).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selectedTool, showPathPreview])
 
   useEffect(() => {
     animFrame.current = requestAnimationFrame(draw)
