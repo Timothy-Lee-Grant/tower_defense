@@ -1,0 +1,65 @@
+/* ── Dungeon Architect Global Styles ── */
+:root {
+  --stone-darkest:  #0d0b0e;
+  --stone-dark:     #16121a;
+  --stone-mid:      #251e2d;
+  --stone-light:    #3a2f47;
+  --stone-muted:    #5a4e6e;
+  --gold-bright:    #e8c44a;
+  --gold-mid:       #c9a02a;
+  --gold-dim:       #7a5f18;
+  --blood-red:      #8b1a1a;
+  --ember:          #c4430a;
+  --poison:         #3d7a1a;
+  --ice:            #2a5f8b;
+  --bone:           #c8b89a;
+  --bone-dim:       #8a7a60;
+  --text-primary:   #e8dcc8;
+  --text-secondary: #9a8a72;
+  --text-muted:     #5a4e3a;
+  --border-glow:    rgba(232, 196, 74, 0.25);
+
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--stone-darkest);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--stone-darkest);
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--stone-dark); }
+::-webkit-scrollbar-thumb { background: var(--stone-light); border-radius: 3px; }
+
+/* Utility classes */
+.gold-text { color: var(--gold-bright); font-family: 'Cinzel', serif; }
+.bone-text { color: var(--bone); }
+.muted-text { color: var(--text-secondary); }
+
+button {
+  cursor: pointer;
+  border: none;
+  font-family: 'Cinzel', serif;
+  transition: all 0.15s ease;
+}
+
+button:active { transform: scale(0.97); }
