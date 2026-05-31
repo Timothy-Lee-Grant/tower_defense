@@ -3,6 +3,7 @@ import { useGameStore, PHASE } from './store/gameStore.js'
 import MainMenu from './components/MainMenu.jsx'
 import GameScreen from './components/GameScreen.jsx'
 import ResultsScreen from './components/ResultsScreen.jsx'
+import VictoryScreen from './components/VictoryScreen.jsx'
 
 export default function App() {
   const phase = useGameStore(s => s.phase)
@@ -12,6 +13,7 @@ export default function App() {
       {phase === PHASE.MENU    && <MainMenu />}
       {(phase === PHASE.PLAN || phase === PHASE.WAVE) && <GameScreen />}
       {phase === PHASE.RESULTS && <ResultsScreen />}
+      {phase === PHASE.VICTORY && <VictoryScreen />}
     </div>
   )
 }

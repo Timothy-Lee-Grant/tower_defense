@@ -50,6 +50,11 @@ export function createHero(heroType, spawnIndex) {
     spawnDelay:     spawnIndex * HERO_SPAWN_STAGGER_MS,
     spawned:        false,
     goldValue:      HERO_KILL_GOLD[heroType.id] ?? 30,
+    // Tier-3+ abilities
+    immuneToSlow:    heroType.immuneToSlow    ?? false,
+    immuneToPoison:  heroType.immuneToPoison  ?? false,
+    damageReduction: heroType.damageReduction ?? 0,
+    healAmount:      heroType.healAmount      ?? 5,
   }
 }
 
@@ -86,24 +91,27 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         : { ...hero, slowed: false, slowTimer: 0 }
     }
 
-    // Poison DoT — 3 HP/s
-    if (hero.poisoned) {
-      hero = { ...hero, hp: hero.hp - 3 * (deltaMs / 1000) }
+    // Poison DoT — 3 HP/s (ignored by immuneToPoison heroes)
+    if (hero.poisoned && !hero.immuneToPoison) {
+      const dmg = 3 * (deltaMs / 1000) * (1 - hero.damageReduction)
+      hero = { ...hero, hp: hero.hp - dmg }
     }
 
     // Lava DoT — 15 HP/s while standing on a LAVA tile
     const curTileId = grid[hero.row]?.[hero.col]
     if (curTileId === TILE.LAVA) {
-      hero = { ...hero, hp: hero.hp - 15 * (deltaMs / 1000) }
+      const dmg = 15 * (deltaMs / 1000) * (1 - hero.damageReduction)
+      hero = { ...hero, hp: hero.hp - dmg }
       events.push({ type: 'lava_damage', heroId: hero.id })
     }
 
-    // Paladin passive heal — 5 HP/s to adjacent allies already queued
+    // Healer passive — HP/s to adjacent allies already queued (rate from healAmount)
     if (hero.heals) {
+      const rate = hero.healAmount ?? 5
       for (const other of updatedHeroes) {
         const d = Math.abs(other.col - hero.col) + Math.abs(other.row - hero.row)
         if (d <= 1 && other.state === 'moving' && other.hp < other.maxHp) {
-          other.hp = Math.min(other.maxHp, other.hp + 5 * (deltaMs / 1000))
+          other.hp = Math.min(other.maxHp, other.hp + rate * (deltaMs / 1000))
         }
       }
     }
@@ -215,17 +223,22 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       if (target) {
         const idx = updatedHeroes.indexOf(target)
         if (idx >= 0) {
+          const h = updatedHeroes[idx]
           let dmg = toolDef.damage
-          // Mage fire resistance
-          if (tileId === TILE.FIRE) dmg = Math.round(dmg * (updatedHeroes[idx].fireResist ?? 1))
+          // Fire resistance (mage, ranger, archmage)
+          if (tileId === TILE.FIRE) dmg = Math.round(dmg * (h.fireResist ?? 1))
+          // Universal damage reduction (champion)
+          dmg = Math.round(dmg * (1 - h.damageReduction))
 
           const updates = {
-            hp:      updatedHeroes[idx].hp - dmg,
-            poisoned: updatedHeroes[idx].poisoned || (toolDef.poisonOnHit  ?? false),
-            slowed:   updatedHeroes[idx].slowed   || (toolDef.slowOnHit    ?? false),
-            slowTimer: toolDef.slowOnHit
-              ? Math.max(updatedHeroes[idx].slowTimer, 2000)
-              : updatedHeroes[idx].slowTimer,
+            hp:      h.hp - dmg,
+            // Poison: only applied if hero is not immune
+            poisoned: h.poisoned || (!h.immuneToPoison && (toolDef.poisonOnHit ?? false)),
+            // Slow: only applied if hero is not immune
+            slowed:   h.slowed   || (!h.immuneToSlow   && (toolDef.slowOnHit   ?? false)),
+            slowTimer: (!h.immuneToSlow && toolDef.slowOnHit)
+              ? Math.max(h.slowTimer, 2000)
+              : h.slowTimer,
           }
           updatedHeroes[idx] = { ...updatedHeroes[idx], ...updates }
 
@@ -267,12 +280,14 @@ function handleOnPathTrap(hero, tileId, tilePos, events) {
         events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
         return { hero }
       }
+      const spikeDmg = Math.round(25 * (1 - hero.damageReduction))
       events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
-      return { hero: { ...hero, hp: hero.hp - 25 } }
+      return { hero: { ...hero, hp: hero.hp - spikeDmg } }
     }
     case TILE.BOULDER: {
+      const boulderDmg = Math.round(60 * (1 - hero.damageReduction))
       events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
-      return { hero: { ...hero, hp: hero.hp - 60 } }
+      return { hero: { ...hero, hp: hero.hp - boulderDmg } }
     }
     // LAVA damage is handled per-tick above, not on arrival
     default:

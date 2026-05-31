@@ -17,7 +17,7 @@ function makeInitialGrid() {
   return grid
 }
 
-export const PHASE = { MENU: 'menu', PLAN: 'plan', WAVE: 'wave', RESULTS: 'results' }
+export const PHASE = { MENU: 'menu', PLAN: 'plan', WAVE: 'wave', RESULTS: 'results', VICTORY: 'victory' }
 
 // ── Store ──────────────────────────────────────────────────────────────────
 export const useGameStore = create((set, get) => ({
@@ -248,6 +248,14 @@ export const useGameStore = create((set, get) => ({
     const { waveIndex, unlockedTools } = get()
     if (card.type === 'unlock') set({ unlockedTools: [...unlockedTools, card.tool.id] })
     else if (card.type === 'gold') set({ bank: get().bank + card.amount })
-    set({ phase: PHASE.PLAN, waveIndex: waveIndex + 1, upgradeCards: [], heroes: [] })
+
+    const nextWaveIndex = waveIndex + 1
+    const isLastWave    = nextWaveIndex >= WAVE_CONFIGS.length
+    set({
+      phase:      isLastWave ? PHASE.VICTORY : PHASE.PLAN,
+      waveIndex:  nextWaveIndex,
+      upgradeCards: [],
+      heroes: [],
+    })
   },
 }))

@@ -225,26 +225,75 @@ export const HERO_TYPES = {
     id: 'paladin', label: 'Paladin', emoji: '🛡️',
     hp: 100, speed: 0.9, color: '#c8c848',
     description: 'Heals adjacent allies 5 HP/s. Gold is heavy with full plate armour.',
-    canDisarm: false, heals: true,
+    canDisarm: false, heals: true, healAmount: 5,
     goldSpeedMult: 0.82,
+  },
+
+  // ── Tier 3 heroes (waves 8+) ───────────────────────────────────────────────
+  berserker: {
+    id: 'berserker', label: 'Berserker', emoji: '🪓',
+    hp: 200, speed: 1.8, color: '#c43a1a',
+    description: 'Massive HP, fast, and immune to slows. Pure rage — nothing holds a Berserker back.',
+    canDisarm: false, heals: false, immuneToSlow: true,
+    goldSpeedMult: 1.1,
+  },
+  ranger: {
+    id: 'ranger', label: 'Ranger', emoji: '🏹',
+    hp: 45, speed: 2.2, color: '#5a9a4a',
+    description: 'Nearly as fast as a Thief. Immune to poison. Fire-resistant. Fragile but impossible to pin down.',
+    canDisarm: false, heals: false, immuneToPoison: true, fireResist: 0.4,
+    goldSpeedMult: 1.2,
+  },
+  cleric: {
+    id: 'cleric', label: 'Cleric', emoji: '✝️',
+    hp: 80, speed: 0.9, color: '#dce8f0',
+    description: 'Heals nearby allies at 8 HP/s — stronger than a Paladin. A dedicated field medic.',
+    canDisarm: false, heals: true, healAmount: 8,
+    goldSpeedMult: 0.85,
+  },
+  archmage: {
+    id: 'archmage', label: 'Archmage', emoji: '🔮',
+    hp: 90, speed: 1.1, color: '#bf3abf',
+    description: 'Takes only 15% fire damage. Immune to ice slows. A master of elemental resistance.',
+    canDisarm: false, heals: false, fireResist: 0.15, immuneToSlow: true,
+    goldSpeedMult: 0.6,
+  },
+  champion: {
+    id: 'champion', label: 'Champion', emoji: '⚜️',
+    hp: 300, speed: 0.85, color: '#c8a020',
+    description: 'Legendary warrior. Enormous HP and takes only 50% damage from all sources. The dungeon\'s greatest threat.',
+    canDisarm: false, heals: false, damageReduction: 0.5,
+    goldSpeedMult: 0.95,
   },
 }
 
 // ── Wave Compositions ──────────────────────────────────────────────────────
 export const WAVE_CONFIGS = [
-  { wave: 1, heroes: ['knight','knight','knight'],                              gold: 120, label: 'The First Scouting Party' },
-  { wave: 2, heroes: ['knight','knight','thief'],                               gold: 140, label: 'They Brought a Lockpick' },
-  { wave: 3, heroes: ['knight','mage','thief'],                                 gold: 160, label: 'Mixed Tactics' },
-  { wave: 4, heroes: ['knight','knight','mage','thief'],                        gold: 190, label: 'A Full Party' },
-  { wave: 5, heroes: ['knight','mage','thief','paladin'],                       gold: 220, label: 'They Brought a Healer' },
-  { wave: 6, heroes: ['knight','knight','mage','thief','paladin'],              gold: 260, label: 'The Siege Begins' },
-  { wave: 7, heroes: ['knight','knight','knight','mage','mage','paladin'],      gold: 300, label: 'They Are Not Giving Up' },
+  // Tier 1 — tutorial curve (waves 1-3)
+  { wave: 1,  heroes: ['knight','knight','knight'],                                                   gold: 120, label: 'The First Scouting Party' },
+  { wave: 2,  heroes: ['knight','knight','thief'],                                                    gold: 140, label: 'They Brought a Lockpick' },
+  { wave: 3,  heroes: ['knight','mage','thief'],                                                      gold: 160, label: 'Mixed Tactics' },
+  // Tier 2 — full classic roster (waves 4-7)
+  { wave: 4,  heroes: ['knight','knight','mage','thief'],                                             gold: 190, label: 'A Full Party' },
+  { wave: 5,  heroes: ['knight','mage','thief','paladin'],                                            gold: 220, label: 'They Brought a Healer' },
+  { wave: 6,  heroes: ['knight','knight','mage','thief','paladin'],                                   gold: 260, label: 'The Siege Begins' },
+  { wave: 7,  heroes: ['knight','knight','knight','mage','mage','paladin'],                           gold: 300, label: 'They Are Not Giving Up' },
+  // Tier 3 — new threats (waves 8-10)
+  { wave: 8,  heroes: ['berserker','knight','knight','mage','paladin'],                               gold: 280, label: 'The Rage Begins' },
+  { wave: 9,  heroes: ['ranger','ranger','berserker','knight','mage','thief'],                        gold: 310, label: 'Swift as Shadows' },
+  { wave: 10, heroes: ['berserker','berserker','ranger','knight','mage','paladin'],                   gold: 340, label: 'The Brute Squad' },
+  // Tier 4 — elite compositions (waves 11-12)
+  { wave: 11, heroes: ['berserker','ranger','knight','mage','paladin','cleric'],                      gold: 380, label: 'They Brought a Cleric' },
+  { wave: 12, heroes: ['berserker','berserker','ranger','ranger','mage','paladin','cleric'],          gold: 420, label: 'The Veteran Warband' },
+  // Tier 5 — near-impossible (waves 13-14)
+  { wave: 13, heroes: ['archmage','berserker','ranger','knight','paladin','cleric','thief'],          gold: 460, label: 'The Arcane Host' },
+  { wave: 14, heroes: ['champion','archmage','berserker','ranger','cleric','paladin','thief'],        gold: 500, label: "The Champion's Crusade" },
 ]
 
 // ── Economy ────────────────────────────────────────────────────────────────
 export const STARTING_GOLD         = 250     // bumped from 200 — longer path needs more setup
 export const SELL_REFUND_RATE      = 0.5
-export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50 }
+export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100 }
 export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero who has the treasure
 export const TREASURE_MAX_HP       = 300
 export const TREASURE_HERO_DAMAGE  = 80

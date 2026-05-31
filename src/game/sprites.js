@@ -345,6 +345,512 @@ export function drawPaladin(ctx, cx, cy, t, hero = {}) {
 }
 
 
+// Berserker: horned helm, giant axe, tattered red armour, heavy rage-stomp walk
+export function drawBerserker(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.010) * 2.2
+  const lean = swing(t, 0.010) * 0.10
+  const lLeg = swing(t, 0.012) * 8
+  const rLeg = -lLeg
+  const rage = osc(t, 0.008)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+  ctx.rotate(lean)
+
+  // shadow (large — heavy unit)
+  ctx.fillStyle = 'rgba(0,0,0,0.36)'
+  ctx.beginPath(); ctx.ellipse(0, 20, 14, 5, 0, 0, Math.PI * 2); ctx.fill()
+
+  // boots
+  ctx.fillStyle = '#3a2010'
+  ctx.fillRect(-10, 15 + lLeg * 0.4, 9, 4)
+  ctx.fillRect(  1, 15 + rLeg * 0.4, 9, 4)
+  // greaves
+  ctx.fillStyle = '#5a3818'
+  ctx.fillRect( -9, 7 + lLeg * 0.4, 8, 10)
+  ctx.fillRect(  1, 7 + rLeg * 0.4, 8, 10)
+
+  // tattered battle armor — body
+  ctx.fillStyle = '#6a2810'
+  ctx.fillRect(-12, -9, 24, 18)
+  ctx.fillStyle = '#8a3818'
+  ctx.fillRect(-11, -8, 22, 15)
+  // tattered rips
+  ctx.fillStyle = '#4a1808'
+  ctx.fillRect(-11, 2, 5, 2); ctx.fillRect(6, -3, 5, 2)
+  // rage-heat glow over chest
+  ctx.fillStyle = `rgba(255,80,20,${0.05 + rage * 0.12})`
+  ctx.fillRect(-11, -8, 22, 15)
+
+  // massive pauldrons
+  ctx.fillStyle = '#5a2808'
+  ctx.fillRect(-20, -13, 9, 8)
+  ctx.fillRect( 11, -13, 9, 8)
+  ctx.fillStyle = '#7a3818'
+  ctx.fillRect(-19, -12, 7, 6)
+  ctx.fillRect( 12, -12, 7, 6)
+
+  // two-handed axe (right side)
+  const axeSw = swing(t, 0.010) * 3
+  // haft
+  ctx.fillStyle = '#4a3a20'
+  ctx.fillRect(11 + axeSw * 0.3, -30 + axeSw, 4, 40)
+  // axe head
+  ctx.fillStyle = '#8a8898'
+  ctx.fillRect( 8 + axeSw * 0.3, -34 + axeSw, 14, 5)
+  ctx.fillRect( 8 + axeSw * 0.3, -29 + axeSw, 14, 5)
+  ctx.fillStyle = '#b0b0c0'
+  ctx.fillRect( 9 + axeSw * 0.3, -33 + axeSw, 12, 4)
+  ctx.fillStyle = 'rgba(200,200,220,0.75)'
+  ctx.fillRect(20 + axeSw * 0.3, -33 + axeSw,  2, 9) // edge gleam
+
+  // left arm
+  ctx.fillStyle = '#7a3818'
+  ctx.fillRect(-20, -8, 8, 12)
+  ctx.fillStyle = '#c8a078'
+  ctx.fillRect(-21, 3, 7, 4) // fist
+
+  // face / neck
+  ctx.fillStyle = '#c8a078'
+  ctx.fillRect(-6, -22, 12, 11)
+
+  // horned iron helmet
+  ctx.fillStyle = '#4a4050'
+  ctx.fillRect(-10, -30, 20, 13)
+  ctx.fillStyle = '#5a5060'
+  ctx.fillRect( -8, -36, 16,  8)
+  // horns
+  ctx.fillStyle = '#6a5840'
+  ctx.fillRect(-14, -36, 5, 13); ctx.fillRect( 9, -36, 5, 13)
+  ctx.fillRect(-13, -43, 4,  9); ctx.fillRect( 9, -43, 4,  9)
+  // visor slot
+  ctx.fillStyle = '#0a0808'
+  ctx.fillRect( -8, -26, 16, 5)
+  // rage eyes glowing red-orange
+  ctx.fillStyle = `rgba(255,60,10,${0.65 + rage * 0.35})`
+  ctx.fillRect(-7, -25, 5, 2)
+  ctx.fillRect( 2, -25, 5, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-21, -43, 42, 66)
+  }
+  // slow-immune shimmer
+  if (hero.slowed === false && hero.immuneToSlow) {
+    ctx.fillStyle = 'rgba(255,100,20,0.08)'
+    ctx.fillRect(-21, -43, 42, 66)
+  }
+  ctx.restore()
+}
+
+
+// Ranger: forest-green hooded cloak, quiver on back, bow in hand, light quick steps
+export function drawRanger(ctx, cx, cy, t, hero = {}) {
+  const bob   = swing(t, 0.011) * 1.2
+  const lLeg  = swing(t, 0.013) * 6
+  const rLeg  = -lLeg
+  const lean  = swing(t, 0.011) * 0.07
+  const cloak = osc(t, 0.004)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+  ctx.rotate(lean)
+
+  // shadow (light — nimble)
+  ctx.fillStyle = 'rgba(0,0,0,0.20)'
+  ctx.beginPath(); ctx.ellipse(0, 15, 8, 3, 0, 0, Math.PI * 2); ctx.fill()
+
+  // dark-leather legs
+  ctx.fillStyle = '#2a3820'
+  ctx.fillRect(-5, 5 + lLeg * 0.35, 4, 9)
+  ctx.fillRect( 1, 5 + rLeg * 0.35, 4, 9)
+  // boots
+  ctx.fillStyle = '#3a2810'
+  ctx.fillRect(-6, 12 + lLeg * 0.35, 5, 3)
+  ctx.fillRect( 1, 12 + rLeg * 0.35, 5, 3)
+
+  // cloak body
+  ctx.fillStyle = '#2a4a20'
+  ctx.fillRect(-7, -6, 14, 13)
+  ctx.fillStyle = `rgba(60,90,40,${0.3 + cloak * 0.3})`
+  ctx.fillRect(-6, -5, 12, 10)
+
+  // quiver on back (left side)
+  ctx.fillStyle = '#5a3a10'
+  ctx.fillRect(-13, -9, 5, 14)
+  // arrow shafts
+  ctx.fillStyle = '#8a6030'
+  ctx.fillRect(-12, -18, 1, 11)
+  ctx.fillRect(-11, -17, 1, 10)
+  ctx.fillRect(-10, -16, 1,  9)
+  // fletching
+  ctx.fillStyle = '#c04020'
+  ctx.fillRect(-13, -20, 4, 4)
+
+  // bow (right side)
+  const bowSw = swing(t, 0.011) * 1.5
+  ctx.fillStyle = '#6a4818'
+  ctx.fillRect(9 + bowSw * 0.3, -22, 3, 34)
+  ctx.fillStyle = '#8a6030'
+  ctx.fillRect(11 + bowSw * 0.3, -20, 3, 4); ctx.fillRect(11 + bowSw * 0.3, 9, 3, 4)
+  // string
+  ctx.fillStyle = '#d0c090'
+  ctx.fillRect(12 + bowSw * 0.3, -18, 1, 30)
+
+  // left arm
+  ctx.fillStyle = '#3a5828'
+  ctx.fillRect(-15, -5, 7, 8)
+  ctx.fillStyle = '#c8a878'
+  ctx.fillRect(-16, 2, 6, 3)
+
+  // hood
+  ctx.fillStyle = '#2a4a20'
+  ctx.fillRect(-7, -22, 14, 18)
+  ctx.fillRect(-5, -26, 10,  6)
+  // face
+  ctx.fillStyle = '#c8a878'
+  ctx.fillRect(-4, -18, 8, 7)
+  // hood shadow brow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'
+  ctx.fillRect(-4, -18, 8, 4)
+  // eyes
+  ctx.fillStyle = '#1a1a10'
+  ctx.fillRect(-3, -15, 2, 2)
+  ctx.fillRect( 1, -15, 2, 2)
+  ctx.fillStyle = 'rgba(120,200,80,0.75)'
+  ctx.fillRect(-2, -15, 1, 1); ctx.fillRect(2, -15, 1, 1)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-16, -26, 32, 44)
+  }
+  ctx.restore()
+}
+
+
+// Cleric: white/silver robes, holy cross staff, radiant blue-white healing aura
+export function drawCleric(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.005) * 1.3
+  const lLeg = swing(t, 0.005) * 4
+  const rLeg = -lLeg
+  const aura = osc(t, 0.004)
+  const glow = osc(t, 0.003)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // healing aura (brighter and wider than paladin)
+  ctx.fillStyle = `rgba(200,230,255,${0.06 + aura * 0.10})`
+  ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgba(255,255,255,${0.02 + glow * 0.06})`
+  ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.fill()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 11, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // legs under robe
+  ctx.fillStyle = '#c0ccd8'
+  ctx.fillRect(-8, 6 + lLeg * 0.3, 6, 10)
+  ctx.fillRect( 2, 6 + rLeg * 0.3, 6, 10)
+
+  // robe body
+  ctx.fillStyle = '#e8f0f8'
+  ctx.fillRect(-9, -7, 18, 17)
+  ctx.fillRect(-11, 8, 22, 8) // flared hem
+  // blue trim
+  ctx.fillStyle = '#4a70c0'
+  ctx.fillRect( -9, -7, 2, 17); ctx.fillRect(7, -7, 2, 17)
+  ctx.fillRect(-11, 14, 22, 2)
+  // holy cross emblem (glowing)
+  ctx.fillStyle = `rgba(200,230,255,${0.55 + glow * 0.45})`
+  ctx.fillRect(-1, -6, 2, 12); ctx.fillRect(-5, 0, 10, 2)
+
+  // silver pauldrons
+  ctx.fillStyle = '#b0c0d8'
+  ctx.fillRect(-15, -9, 6, 5); ctx.fillRect(9, -9, 6, 5)
+
+  // holy cross staff
+  const stSw = swing(t, 0.004) * 2
+  ctx.fillStyle = '#c0c8d8'
+  ctx.fillRect(11 + stSw * 0.3, -32 + stSw * 0.5, 3, 46)
+  // crossbeam
+  ctx.fillStyle = '#e0e8f8'
+  ctx.fillRect( 7 + stSw * 0.3, -32 + stSw * 0.5, 11, 3)
+  // radiant cross glow
+  ctx.fillStyle = `rgba(200,230,255,${0.35 + glow * 0.55})`
+  ctx.fillRect( 8 + stSw * 0.3, -38 + stSw * 0.5, 9, 18)
+
+  // left arm
+  ctx.fillStyle = '#d0dce8'
+  ctx.fillRect(-17, -6, 7, 10)
+  ctx.fillStyle = '#e8d0a8'
+  ctx.fillRect(-18, 3, 6, 4)
+
+  // head / face
+  ctx.fillStyle = '#e8d0a8'
+  ctx.fillRect(-6, -19, 12, 12)
+  // eyes
+  ctx.fillStyle = '#2a3040'
+  ctx.fillRect(-4, -15, 3, 3); ctx.fillRect(1, -15, 3, 3)
+  ctx.fillStyle = `rgba(200,230,255,${0.5 + glow * 0.5})`
+  ctx.fillRect(-3, -14, 2, 2); ctx.fillRect(2, -14, 2, 2)
+
+  // white coif / head cloth
+  ctx.fillStyle = '#f0f4f8'
+  ctx.fillRect(-7, -27, 14, 12); ctx.fillRect(-5, -31, 10, 6)
+  // silver circlet
+  ctx.fillStyle = '#c0c8d8'
+  ctx.fillRect(-8, -21, 16, 3)
+  ctx.fillStyle = '#d8e0f0'
+  ctx.fillRect(-6, -24, 12, 4)
+  // cross jewel on circlet
+  ctx.fillStyle = `rgba(200,230,255,${0.7 + glow * 0.3})`
+  ctx.fillRect(-1, -26, 2, 7); ctx.fillRect(-4, -24, 8, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-18, -31, 38, 54)
+  }
+  ctx.restore()
+}
+
+
+// Archmage: deep-purple elaborate robes, multi-star tall hat, orbiting secondary orbs
+export function drawArchmage(ctx, cx, cy, t, hero = {}) {
+  const bob     = swing(t, 0.006) * 1.8
+  const staffSw = swing(t, 0.004) * 4
+  const orbGlow = osc(t, 0.004)
+  const lLeg    = swing(t, 0.007) * 4
+  const rLeg    = -lLeg
+  const arcane  = osc(t, 0.007)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // arcane aura — pulsing violet
+  ctx.fillStyle = `rgba(160,60,220,${0.05 + arcane * 0.09})`
+  ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 10, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // robe hem
+  ctx.fillStyle = '#3a1870'
+  ctx.fillRect(-9, 6, 18, 12); ctx.fillRect(-11, 11, 22, 8)
+  // robe body
+  ctx.fillStyle = '#4a20a0'
+  ctx.fillRect(-9, -7, 18, 15)
+  // arcane shimmer on robe
+  ctx.fillStyle = `rgba(160,80,220,${0.10 + arcane * 0.16})`
+  ctx.fillRect(-8, -6, 16, 12)
+  // gold + silver trim
+  ctx.fillStyle = '#c8a040'
+  ctx.fillRect(-9, -7, 2, 17); ctx.fillRect(7, -7, 2, 17)
+  ctx.fillRect(-11, 17, 22, 2)
+  ctx.fillStyle = '#e0d0f0'
+  ctx.fillRect(-9, -5, 2, 13); ctx.fillRect(7, -5, 2, 13)
+  // rune symbols on robe
+  ctx.fillStyle = `rgba(200,160,255,${0.4 + arcane * 0.4})`
+  ctx.fillRect(-5, -4, 2, 2); ctx.fillRect(3, 1, 2, 2)
+  ctx.fillRect(-3,  5, 2, 2); ctx.fillRect(-1, -1, 2, 2)
+
+  // powerful staff
+  const stx = 12 + staffSw * 0.5
+  const sty = -staffSw * 0.4
+  ctx.fillStyle = '#5a3810'
+  ctx.fillRect(stx, sty - 30, 4, 46)
+  // large orb and triple-halo
+  ctx.fillStyle = `rgba(220,60,220,${0.10 + orbGlow * 0.35})`
+  ctx.beginPath(); ctx.arc(stx + 2, sty - 34, 16, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgba(180,40,220,${0.18 + orbGlow * 0.38})`
+  ctx.beginPath(); ctx.arc(stx + 2, sty - 34, 10, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgb(${160 + (orbGlow * 80)|0}, 40, ${200 + (orbGlow * 55)|0})`
+  ctx.beginPath(); ctx.arc(stx + 2, sty - 34, 7, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(240,200,255,0.85)'
+  ctx.beginPath(); ctx.arc(stx, sty - 36, 3, 0, Math.PI * 2); ctx.fill()
+  // two orbiting secondary orbs
+  const ang1 = t * 0.003
+  const ang2 = ang1 + Math.PI
+  ctx.fillStyle = `rgba(220,140,255,${0.5 + orbGlow * 0.5})`
+  ctx.beginPath(); ctx.arc(stx + 2 + Math.cos(ang1) * 13, sty - 34 + Math.sin(ang1) * 7, 4, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(stx + 2 + Math.cos(ang2) * 13, sty - 34 + Math.sin(ang2) * 7, 4, 0, Math.PI * 2); ctx.fill()
+
+  // left sleeve + hand
+  ctx.fillStyle = '#3a1870'
+  ctx.fillRect(-17, -6, 8, 12)
+  ctx.fillStyle = '#e8c890'
+  ctx.fillRect(-18, 5, 7, 4)
+
+  // head / face
+  ctx.fillStyle = '#e8c890'
+  ctx.fillRect(-6, -19, 12, 13)
+  ctx.fillStyle = '#1a1020'
+  ctx.fillRect(-4, -15, 3, 3); ctx.fillRect(1, -15, 3, 3)
+  // glowing arcane eyes
+  ctx.fillStyle = `rgba(200,80,255,${0.65 + orbGlow * 0.35})`
+  ctx.fillRect(-3, -14, 2, 2); ctx.fillRect(2, -14, 2, 2)
+  // long white beard
+  ctx.fillStyle = '#e8e8d8'
+  ctx.fillRect(-5, -9, 10, 5)
+
+  // hat brim (wider than standard mage)
+  ctx.fillStyle = '#1e0e5e'
+  ctx.fillRect(-12, -21, 24, 4)
+  ctx.fillStyle = `rgba(255,200,80,${0.5 + orbGlow * 0.4})`
+  ctx.fillRect(-11, -22, 22, 2) // star band
+  // hat cone — tall, multi-segment
+  ctx.fillStyle = '#2a1880'
+  ctx.fillRect(-9, -30, 18, 11); ctx.fillRect(-7, -40, 14, 12)
+  ctx.fillRect(-5, -50, 10, 12); ctx.fillRect(-3, -58, 6, 10)
+  ctx.fillRect(-1, -64, 2,  8)
+  // stars on hat
+  ctx.fillStyle = `rgba(255,200,80,${0.5 + orbGlow * 0.5})`
+  ctx.fillRect(-5, -38, 10, 2); ctx.fillRect(-2, -42, 4, 12)
+  ctx.fillRect(-4, -53, 8,  2); ctx.fillRect(-1, -57, 2, 10)
+  // arcane sigil on hat
+  ctx.fillStyle = `rgba(200,100,255,${0.4 + arcane * 0.4})`
+  ctx.fillRect(-4, -33, 4, 2); ctx.fillRect(0, -33, 4, 2)
+  ctx.fillRect(-2, -35, 4, 2); ctx.fillRect(-2, -31, 4, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-18, -64, 38, 84)
+  }
+  ctx.restore()
+}
+
+
+// Champion: ornate gold-silver plate, crown-helm, massive greatsword, flowing red cape
+export function drawChampion(ctx, cx, cy, t, hero = {}) {
+  const bob   = swing(t, 0.004) * 1.2
+  const lLeg  = swing(t, 0.004) * 4
+  const rLeg  = -lLeg
+  const lean  = swing(t, 0.004) * 0.04
+  const rune  = osc(t, 0.003)
+  const aura  = osc(t, 0.002)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+  ctx.rotate(lean)
+
+  // legendary golden aura
+  ctx.fillStyle = `rgba(220,180,40,${0.04 + aura * 0.07})`
+  ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI * 2); ctx.fill()
+
+  // shadow (very large)
+  ctx.fillStyle = 'rgba(0,0,0,0.38)'
+  ctx.beginPath(); ctx.ellipse(0, 22, 16, 6, 0, 0, Math.PI * 2); ctx.fill()
+
+  // sabatons
+  ctx.fillStyle = '#b0a060'
+  ctx.fillRect(-12, 19 + lLeg * 0.4, 11, 4)
+  ctx.fillRect(  1, 19 + rLeg * 0.4, 11, 4)
+  // greaves
+  ctx.fillStyle = '#7a7040'
+  ctx.fillRect(-11, 10 + lLeg * 0.4, 10, 11)
+  ctx.fillRect(  1, 10 + rLeg * 0.4, 10, 11)
+  ctx.fillStyle = '#a09050'
+  ctx.fillRect(-10, 11 + lLeg * 0.4,  8,  8)
+  ctx.fillRect(  2, 11 + rLeg * 0.4,  8,  8)
+
+  // flowing red cape (drawn before body so body covers overlap)
+  const capeSw = swing(t, 0.004) * 4
+  ctx.fillStyle = '#5a0808'
+  ctx.fillRect(-14, -11, 28, 24)
+  ctx.fillStyle = '#8a1010'
+  ctx.fillRect(-13, -10, 26, 20)
+  // cape gold border
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect(-13, 9, 26, 2); ctx.fillRect(-13, -10, 2, 20); ctx.fillRect(11, -10, 2, 20)
+
+  // body — heavy ornate plate
+  ctx.fillStyle = '#7a7838'
+  ctx.fillRect(-13, -9, 26, 20)
+  ctx.fillStyle = '#9a9848'
+  ctx.fillRect(-12, -8, 24, 18)
+  // gold inlay lines
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect(-12, -8, 24, 2); ctx.fillRect(-12, 8, 24, 2)
+  // rune etching on chest (glowing)
+  ctx.fillStyle = `rgba(255,220,80,${0.30 + rune * 0.42})`
+  ctx.fillRect( -1, -7, 2, 14)     // vertical
+  ctx.fillRect( -6,  0, 12, 2)     // horizontal
+  ctx.fillRect( -8, -4, 16, 2)     // top rune bar
+  ctx.fillRect( -8,  6, 16, 2)     // bottom rune bar
+
+  // massive pauldrons
+  ctx.fillStyle = '#8a8840'
+  ctx.fillRect(-22, -14, 10, 10); ctx.fillRect(12, -14, 10, 10)
+  ctx.fillStyle = '#a0a050'
+  ctx.fillRect(-21, -13,  8,  8); ctx.fillRect(13, -13,  8,  8)
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect(-18, -10, 3, 3); ctx.fillRect(15, -10, 3, 3) // rivets
+
+  // greatsword (right side, massive)
+  const swdSw = swing(t, 0.004) * 2
+  // grip
+  ctx.fillStyle = '#5a4820'
+  ctx.fillRect(15 + swdSw * 0.3, -18 + swdSw, 4, 24)
+  // blade
+  ctx.fillStyle = '#b0b8c8'
+  ctx.fillRect(13 + swdSw * 0.3, -44 + swdSw, 8, 28)
+  ctx.fillStyle = '#d0d8e8'
+  ctx.fillRect(14 + swdSw * 0.3, -43 + swdSw, 6, 26)
+  // edge gleam
+  ctx.fillStyle = 'rgba(240,240,255,0.90)'
+  ctx.fillRect(14 + swdSw * 0.3, -43 + swdSw, 2, 26)
+  // crossguard
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect( 9 + swdSw * 0.3, -19 + swdSw, 18, 4)
+  // pommel
+  ctx.fillStyle = '#d8b040'
+  ctx.fillRect(14 + swdSw * 0.3, 4 + swdSw, 6, 5)
+  // rune on blade
+  ctx.fillStyle = `rgba(255,220,80,${0.35 + rune * 0.50})`
+  ctx.fillRect(16 + swdSw * 0.3, -40 + swdSw, 2, 20)
+
+  // left gauntlet
+  ctx.fillStyle = '#9a9848'
+  ctx.fillRect(-24, -7, 9, 13)
+  ctx.fillStyle = '#b0b050'
+  ctx.fillRect(-23, -6, 7, 11)
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect(-23, -6, 7, 2)
+
+  // great helm + crown
+  ctx.fillStyle = '#8a8840'
+  ctx.fillRect(-11, -28, 22, 23)
+  ctx.fillStyle = '#9a9848'
+  ctx.fillRect( -9, -32,  18, 8)
+  // crown points
+  ctx.fillStyle = '#c8a030'
+  ctx.fillRect( -9, -39, 5, 9)   // left point
+  ctx.fillRect( -2, -42, 5, 12)  // center point (tallest)
+  ctx.fillRect(  4, -39, 5, 9)   // right point
+  // crown jewels
+  ctx.fillStyle = `rgba(80,80,255,${0.70 + rune * 0.30})`
+  ctx.fillRect(-8, -36, 4, 4)
+  ctx.fillStyle = `rgba(255,60,60,${0.70 + rune * 0.30})`
+  ctx.fillRect(-1, -39, 4, 4)
+  ctx.fillStyle = `rgba(60,200,60,${0.70 + rune * 0.30})`
+  ctx.fillRect( 5, -36, 4, 4)
+  // visor slit
+  ctx.fillStyle = '#1a1808'
+  ctx.fillRect(-9, -22, 18, 6)
+  // glowing eyes through visor
+  ctx.fillStyle = `rgba(255,200,40,${0.55 + rune * 0.45})`
+  ctx.fillRect(-8, -21, 6, 2); ctx.fillRect(2, -21, 6, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-24, -42, 48, 68)
+  }
+  ctx.restore()
+}
+
+
 // ── TILE SPRITES ─────────────────────────────────────────────────────────────
 // Each takes (ctx, tx, ty, t) where tx/ty = tile top-left (multiples of TILE_SIZE=48)
 
@@ -1149,10 +1655,15 @@ export function drawAttackEffect(ctx, flash, now) {
 // ── Sprite maps ──────────────────────────────────────────────────────────────
 
 export const HERO_SPRITES = {
-  knight:  drawKnight,
-  mage:    drawMage,
-  thief:   drawThief,
-  paladin: drawPaladin,
+  knight:    drawKnight,
+  mage:      drawMage,
+  thief:     drawThief,
+  paladin:   drawPaladin,
+  berserker: drawBerserker,
+  ranger:    drawRanger,
+  cleric:    drawCleric,
+  archmage:  drawArchmage,
+  champion:  drawChampion,
 }
 
 export const TILE_SPRITES = {
