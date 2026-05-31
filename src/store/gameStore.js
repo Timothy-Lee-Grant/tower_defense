@@ -1,30 +1,26 @@
 // ── Global Game Store ──
-// Single source of truth for all game state using Zustand.
-
 import { create } from 'zustand'
 import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
   STARTING_GOLD, SELL_REFUND_RATE, WAVE_CONFIGS,
   TREASURE_MAX_HP, HERO_TYPES,
+  PATH_TILES, PATH_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
-import { previewPaths } from '../game/pathfinding.js'
 
 // ── Initial Grid ──
+// PATH tiles are pre-drawn; everything else is EMPTY (buildable).
 function makeInitialGrid() {
   const grid = Array.from({ length: GRID_ROWS }, () =>
     Array(GRID_COLS).fill(TILE.EMPTY)
   )
-  // Entrance (left edge, middle)
-  const entranceRow = Math.floor(GRID_ROWS / 2)
-  grid[entranceRow][0] = TILE.ENTRANCE
-  // Treasure room (right edge, middle)
-  grid[entranceRow][GRID_COLS - 1] = TILE.TREASURE
+  for (const pt of PATH_TILES) {
+    grid[pt.row][pt.col] = TILE.PATH
+  }
+  grid[ENTRANCE.row][ENTRANCE.col]  = TILE.ENTRANCE
+  grid[TREASURE.row][TREASURE.col]  = TILE.TREASURE
   return grid
 }
-
-const ENTRANCE  = { col: 0, row: Math.floor(GRID_ROWS / 2) }
-const TREASURE_POS = { col: GRID_COLS - 1, row: Math.floor(GRID_ROWS / 2) }
 
 // ── Phase Enum ──
 export const PHASE = {
@@ -36,44 +32,41 @@ export const PHASE = {
 
 // ── Store ──
 export const useGameStore = create((set, get) => ({
-  // ── Screen state
+  // Screen state
   phase: PHASE.MENU,
 
-  // ── Grid
+  // Grid
   grid: makeInitialGrid(),
-  entrance: ENTRANCE,
-  treasure: TREASURE_POS,
 
-  // ── Tool selection
-  selectedTool: null,        // tool id string or null
+  // Tool selection
+  selectedTool: null,
   selectedCategory: 'traps',
 
-  // ── Economy
+  // Economy
   gold: STARTING_GOLD,
-  bank: 0,                   // persistent gold reserve
+  bank: 0,
   unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
 
-  // ── Waves
+  // Waves
   waveIndex: 0,
   heroes: [],
-  trapTimers: {},            // key: "col,row" → ms elapsed
-  simulationRef: null,       // holds requestAnimationFrame id
+  trapTimers: {},
+  simulationRef: null,
 
-  // ── Scores
+  // Scores
   treasureHp: TREASURE_MAX_HP,
   heroesKilled: 0,
   heroesEscaped: 0,
   goldEarnedThisWave: 0,
-  battleLog: [],             // array of event strings
+  battleLog: [],
 
-  // ── Path preview
-  showPathPreview: false,
-  previewedPaths: null,
+  // Attack flash events for renderer (cleared each tick)
+  attackFlashes: [],
 
-  // ── Upgrade cards (shown in Results phase)
+  // Upgrade cards
   upgradeCards: [],
 
-  // ── Computed helpers
+  // ── Computed helpers ──
   currentWaveConfig: () => WAVE_CONFIGS[get().waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1],
 
   // ── Actions ──
@@ -89,6 +82,7 @@ export const useGameStore = create((set, get) => ({
       heroesKilled: 0,
       heroesEscaped: 0,
       battleLog: [],
+      attackFlashes: [],
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
     })
   },
@@ -110,13 +104,20 @@ export const useGameStore = create((set, get) => ({
     if (!selectedTool) return
     if (!unlockedTools.includes(selectedTool)) return
 
-    // Protect entrance and treasure
-    const tile = grid[row]?.[col]
-    if (tile === TILE.ENTRANCE || tile === TILE.TREASURE) return
+    const currentTile = grid[row]?.[col]
+    if (!currentTile) return
+    if (currentTile === TILE.ENTRANCE || currentTile === TILE.TREASURE) return
 
     const toolDef = DUNGEON_TOOLS.find(t => t.id === selectedTool)
     if (!toolDef) return
     if (gold < toolDef.cost) return
+
+    // Placement rules: on-path traps need a PATH tile; towers need an EMPTY tile
+    const isPathTile = PATH_SET.has(`${col},${row}`) ||
+      currentTile === TILE.SPIKE || currentTile === TILE.BOULDER || currentTile === TILE.DOOR
+
+    if (toolDef.placesOn === 'path' && !isPathTile) return
+    if (toolDef.placesOn === 'open' && (isPathTile || currentTile !== TILE.EMPTY)) return
 
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = selectedTool
@@ -126,35 +127,26 @@ export const useGameStore = create((set, get) => ({
   removeTile(col, row) {
     const { grid, gold } = get()
     const tileId = grid[row]?.[col]
-    if (!tileId || tileId === TILE.EMPTY || tileId === TILE.ENTRANCE || tileId === TILE.TREASURE) return
+    if (!tileId) return
+    if (tileId === TILE.EMPTY || tileId === TILE.PATH ||
+        tileId === TILE.ENTRANCE || tileId === TILE.TREASURE) return
 
     const toolDef = DUNGEON_TOOLS.find(t => t.id === tileId)
     const refund = toolDef ? Math.floor(toolDef.cost * SELL_REFUND_RATE) : 0
 
     const newGrid = grid.map(r => [...r])
-    newGrid[row][col] = TILE.EMPTY
+    // Restore to PATH or EMPTY based on whether this is a path position
+    newGrid[row][col] = PATH_SET.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
     set({ grid: newGrid, gold: gold + refund })
   },
 
-  togglePathPreview() {
-    const { grid, entrance, treasure, showPathPreview } = get()
-    if (!showPathPreview) {
-      const paths = previewPaths(grid, entrance, treasure)
-      set({ showPathPreview: true, previewedPaths: paths })
-    } else {
-      set({ showPathPreview: false, previewedPaths: null })
-    }
-  },
-
   startWave() {
-    const { waveIndex, grid, entrance, treasure } = get()
+    const { waveIndex, grid } = get()
     const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
 
-    // Create hero instances from wave config
-    const heroes = waveConfig.heroes.map((heroId, i) => {
-      const heroType = HERO_TYPES[heroId]
-      return createHero(heroType, i, entrance)
-    })
+    const heroes = waveConfig.heroes.map((heroId, i) =>
+      createHero(HERO_TYPES[heroId], i)
+    )
 
     set({
       phase: PHASE.WAVE,
@@ -162,11 +154,9 @@ export const useGameStore = create((set, get) => ({
       battleLog: [`Wave ${waveIndex + 1}: ${waveConfig.label}`],
       goldEarnedThisWave: 0,
       trapTimers: {},
-      showPathPreview: false,
-      previewedPaths: null,
+      attackFlashes: [],
     })
 
-    // Start simulation loop
     let lastTime = performance.now()
 
     const loop = (now) => {
@@ -176,55 +166,65 @@ export const useGameStore = create((set, get) => ({
       const deltaMs = now - lastTime
       lastTime = now
 
-      // Advance trap timers
-      const newTrapTimers = { ...state.trapTimers }
-      state.grid.forEach((row, r) => {
-        row.forEach((tile, c) => {
-          if ([TILE.FIRE, TILE.DART].includes(tile)) {
-            const k = `${c},${r}`
-            newTrapTimers[k] = (newTrapTimers[k] ?? 0) + deltaMs
-          }
-        })
-      })
-
       const result = simulationTick(
         state.heroes,
         state.grid,
-        state.entrance,
-        state.treasure,
         deltaMs,
-        newTrapTimers,
+        state.trapTimers,
       )
 
-      // Build log entries from events
+      // Build log entries
       const newLogEntries = result.events.map(ev => {
-        if (ev.type === 'hero_killed')    return `☠️ ${ev.label} defeated (+${ev.gold}g)`
+        if (ev.type === 'hero_killed')      return `☠️ ${ev.label} defeated (+${ev.gold}g)`
         if (ev.type === 'treasure_reached') return `💀 ${ev.label} reached your treasure!`
-        if (ev.type === 'trap_triggered') return `⚡ Trap triggered on ${ev.label ?? 'a hero'}`
-        if (ev.type === 'trap_disarmed')  return `🔓 ${ev.label} disarmed a trap`
-        if (ev.type === 'combat')         return `⚔️ Combat at (${ev.trapKey})`
+        if (ev.type === 'trap_triggered')   return `⚡ ${ev.label ?? 'Hero'} hit a ${ev.trap}`
+        if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a spike`
+        if (ev.type === 'tower_attack')     return null  // too noisy for the log
         return null
       }).filter(Boolean)
 
-      const killed = result.heroes.filter(h => h.state === 'dead').length
-      const escaped = result.heroes.filter(h => h.state === 'escaped').length
-      const newTreasureHp = Math.max(0, state.treasureHp - result.treasureDamage)
+      const newDead    = result.heroes.filter(h => h.state === 'dead').length
+      const newEscaped = result.heroes.filter(h => h.state === 'escaped').length
+      const prevDead    = state.heroes.filter(h => h.state === 'dead').length
+      const prevEscaped = state.heroes.filter(h => h.state === 'escaped').length
+
+      // Attack flash events for the renderer (keep for 250ms)
+      const now2 = performance.now()
+      const freshFlashes = result.events
+        .filter(e => e.type === 'tower_attack')
+        .map(e => ({ fromX: e.fromX, fromY: e.fromY, toX: e.toX, toY: e.toY, t: now2 }))
+      const activeFlashes = [
+        ...state.attackFlashes.filter(f => now2 - f.t < 250),
+        ...freshFlashes,
+      ]
 
       set({
         heroes: result.heroes,
-        trapTimers: newTrapTimers,
-        treasureHp: newTreasureHp,
-        heroesKilled: state.heroesKilled + (killed - state.heroes.filter(h => h.state === 'dead').length),
-        heroesEscaped: state.heroesEscaped + (escaped - state.heroes.filter(h => h.state === 'escaped').length),
+        trapTimers: result.trapTimers,
+        treasureHp: Math.max(0, state.treasureHp - result.treasureDamage),
+        heroesKilled: state.heroesKilled + (newDead - prevDead),
+        heroesEscaped: state.heroesEscaped + (newEscaped - prevEscaped),
         goldEarnedThisWave: state.goldEarnedThisWave + result.goldEarned,
         bank: state.bank + result.goldEarned,
         battleLog: [...state.battleLog.slice(-30), ...newLogEntries],
+        attackFlashes: activeFlashes,
       })
 
-      // Check wave end: every hero must have actually spawned AND be in a terminal state.
-      // Unspawned heroes (still counting down) are never considered "done".
-      const waveOver = result.heroes.every(h => h.spawned && (h.state === 'dead' || h.state === 'escaped'))
+      // Handle boulder destruction (one-shot trap)
+      const boulderEvents = result.events.filter(e => e.type === 'trap_triggered' && e.trap === 'boulder')
+      if (boulderEvents.length > 0) {
+        const newGrid = get().grid.map(r => [...r])
+        boulderEvents.forEach(ev => {
+          const [c, r] = ev.trapKey.split(',').map(Number)
+          newGrid[r][c] = TILE.PATH  // boulder consumed
+        })
+        set({ grid: newGrid })
+      }
 
+      // Wave ends when every hero has spawned and is in a terminal state
+      const waveOver = result.heroes.every(
+        h => h.spawned && (h.state === 'dead' || h.state === 'escaped')
+      )
       if (waveOver) {
         get().endWave()
         return
@@ -239,36 +239,31 @@ export const useGameStore = create((set, get) => ({
   },
 
   endWave() {
-    const { simulationRef, waveIndex, bank } = get()
+    const { simulationRef, waveIndex } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
 
-    // Generate 3 random upgrade cards
+    // Generate upgrade cards
     const locked = DUNGEON_TOOLS.filter(t => !t.unlocked)
-    const cards = []
     const shuffled = [...locked].sort(() => Math.random() - 0.5)
-    for (let i = 0; i < Math.min(3, shuffled.length); i++) {
-      cards.push({ type: 'unlock', tool: shuffled[i] })
-    }
-    // Pad with gold bonus cards
-    while (cards.length < 3) {
-      cards.push({ type: 'gold', amount: 80 })
-    }
+    const cards = shuffled.slice(0, Math.min(3, shuffled.length))
+      .map(tool => ({ type: 'unlock', tool }))
+    while (cards.length < 3) cards.push({ type: 'gold', amount: 80 })
 
     set({
       phase: PHASE.RESULTS,
       simulationRef: null,
       upgradeCards: cards,
-      // Refresh per-wave gold budget
       gold: WAVE_CONFIGS[waveIndex + 1]?.gold ?? 300,
+      attackFlashes: [],
     })
   },
 
   pickUpgradeCard(card) {
-    const { waveIndex, unlockedTools, bank } = get()
+    const { waveIndex, unlockedTools } = get()
     if (card.type === 'unlock') {
       set({ unlockedTools: [...unlockedTools, card.tool.id] })
     } else if (card.type === 'gold') {
-      set({ bank: bank + card.amount })
+      set({ bank: get().bank + card.amount })
     }
     set({
       phase: PHASE.PLAN,

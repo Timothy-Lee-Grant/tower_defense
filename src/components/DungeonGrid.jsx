@@ -2,50 +2,50 @@ import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS } from '../game/constants.js'
 
-// ── Color map for each tile type ──
+// ── Tile color map ──
 const TILE_COLORS = {
   [TILE.EMPTY]:    { bg: '#16121a', border: '#1e1828' },
-  [TILE.WALL]:     { bg: '#2a2035', border: '#3a2f47', label: '▪' },
+  [TILE.PATH]:     { bg: '#2a2218', border: '#3d3020' },   // worn stone path
   [TILE.ENTRANCE]: { bg: '#0c0a10', border: '#4a3a60', label: '🚪', glow: '#2d1f40' },
   [TILE.TREASURE]: { bg: '#1a1000', border: '#c9a02a', label: '💰', glow: '#c9a02a' },
+  // On-path traps
   [TILE.SPIKE]:    { bg: '#1e1e28', border: '#6a6a8a', label: '⋀' },
-  [TILE.DART]:     { bg: '#2a1a0a', border: '#8a5a2a', label: '→' },
   [TILE.BOULDER]:  { bg: '#1a1a14', border: '#5a5a48', label: '●' },
+  [TILE.DOOR]:     { bg: '#1e1408', border: '#6a4a2a', label: '▬' },
+  // Off-path towers
+  [TILE.DART]:     { bg: '#2a1a0a', border: '#8a5a2a', label: '🎯' },
   [TILE.FIRE]:     { bg: '#2a1000', border: '#8b3000', label: '🔥', glow: '#c4430a' },
   [TILE.POISON]:   { bg: '#0a1a08', border: '#2a6a18', label: '☠', glow: '#3d7a1a' },
   [TILE.SKELETON]: { bg: '#1e1c1a', border: '#8a7a60', label: '💀' },
-  [TILE.SLIME]:    { bg: '#0a180a', border: '#2a5a1a', label: '●', glow: '#3d7a1a' },
+  [TILE.SLIME]:    { bg: '#0a180a', border: '#2a5a1a', label: '🟢', glow: '#3d7a1a' },
   [TILE.WRAITH]:   { bg: '#14101e', border: '#5a4a8a', label: '👻', glow: '#6a4a8a' },
-  [TILE.DOOR]:     { bg: '#1e1408', border: '#6a4a2a', label: '▬' },
-  [TILE.LEVER]:    { bg: '#1e1c0a', border: '#7a6a2a', label: '⚙' },
-}
-
-// ── Path preview colors ──
-const PATH_COLORS = {
-  knight: 'rgba(200, 160, 72, 0.6)',
-  mage:   'rgba(122, 90, 191, 0.6)',
-  thief:  'rgba(74, 122, 58, 0.6)',
 }
 
 export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const canvasRef = useRef(null)
-  const phase      = useGameStore(s => s.phase)
-  const grid       = useGameStore(s => s.grid)
-  const heroes     = useGameStore(s => s.heroes)
-  const selectedTool = useGameStore(s => s.selectedTool)
-  const showPathPreview = useGameStore(s => s.showPathPreview)
-  const previewedPaths  = useGameStore(s => s.previewedPaths)
 
-  const hoveredTile    = useRef(null)
-  const animFrame      = useRef(null)
-  const timeRef        = useRef(0)
-  // Refs for rapidly-changing state so the draw loop doesn't restart on every frame
-  const heroesRef      = useRef(heroes)
-  const gridRef        = useRef(grid)
-  const previewRef     = useRef(previewedPaths)
-  heroesRef.current    = heroes
-  gridRef.current      = grid
-  previewRef.current   = previewedPaths
+  const phase         = useGameStore(s => s.phase)
+  const grid          = useGameStore(s => s.grid)
+  const heroes        = useGameStore(s => s.heroes)
+  const selectedTool  = useGameStore(s => s.selectedTool)
+  const attackFlashes = useGameStore(s => s.attackFlashes)
+
+  const hoveredTile = useRef(null)
+  const animFrame   = useRef(null)
+  const timeRef     = useRef(0)
+
+  // Refs for rapidly-changing state so the draw loop never restarts mid-wave
+  const heroesRef        = useRef(heroes)
+  const gridRef          = useRef(grid)
+  const attackFlashesRef = useRef(attackFlashes)
+  heroesRef.current        = heroes
+  gridRef.current          = grid
+  attackFlashesRef.current = attackFlashes
+
+  // Resolve range of currently selected tool (for hover preview)
+  const selectedToolDef = selectedTool
+    ? DUNGEON_TOOLS.find(t => t.id === selectedTool)
+    : null
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -54,12 +54,11 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     const t = performance.now()
     timeRef.current = t
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    // Read from refs so this loop never needs to restart mid-wave
     const currentGrid    = gridRef.current
     const currentHeroes  = heroesRef.current
-    const currentPaths   = previewRef.current
+    const currentFlashes = attackFlashesRef.current
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     // ── Draw tiles ──
     for (let row = 0; row < GRID_ROWS; row++) {
@@ -69,11 +68,10 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
 
-        // Background fill
         ctx.fillStyle = colors.bg
         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
 
-        // Glow effect for special tiles
+        // Glow for special tiles
         if (colors.glow) {
           const pulse = 0.7 + 0.3 * Math.sin(t / 600 + col * 0.7 + row * 0.3)
           ctx.save()
@@ -83,14 +81,20 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
           ctx.restore()
         }
 
+        // Path tile directional shading — slightly lighter center strip
+        if (tileId === TILE.PATH || tileId === TILE.SPIKE || tileId === TILE.BOULDER || tileId === TILE.DOOR) {
+          ctx.fillStyle = 'rgba(255,220,160,0.06)'
+          ctx.fillRect(x + 6, y + 6, TILE_SIZE - 12, TILE_SIZE - 12)
+        }
+
         // Tile border
         ctx.strokeStyle = colors.border
         ctx.lineWidth = 0.5
         ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
 
-        // Tile label / icon
-        if (colors.label && tileId !== TILE.EMPTY) {
-          ctx.font = tileId === TILE.TREASURE || tileId === TILE.ENTRANCE
+        // Tile label
+        if (colors.label && tileId !== TILE.EMPTY && tileId !== TILE.PATH) {
+          ctx.font = (tileId === TILE.TREASURE || tileId === TILE.ENTRANCE)
             ? `bold ${TILE_SIZE * 0.5}px serif`
             : `${TILE_SIZE * 0.45}px serif`
           ctx.textAlign = 'center'
@@ -99,42 +103,61 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
             : tileId === TILE.ENTRANCE ? '#c8b8e8' : colors.border
           ctx.fillText(colors.label, x + TILE_SIZE / 2, y + TILE_SIZE / 2)
         }
+      }
+    }
 
-        // Hover highlight
-        if (
-          hoveredTile.current &&
-          hoveredTile.current.col === col &&
-          hoveredTile.current.row === row &&
-          phase === PHASE.PLAN
-        ) {
-          ctx.fillStyle = selectedTool ? 'rgba(232,196,74,0.15)' : 'rgba(200,200,200,0.08)'
-          ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
-          ctx.strokeStyle = selectedTool ? 'rgba(232,196,74,0.6)' : 'rgba(200,200,200,0.3)'
-          ctx.lineWidth = 1.5
-          ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+    // ── Range preview ring when hovering with an off-path tower selected ──
+    if (
+      phase === PHASE.PLAN &&
+      selectedToolDef?.placesOn === 'open' &&
+      selectedToolDef?.range &&
+      hoveredTile.current
+    ) {
+      const { col: hc, row: hr } = hoveredTile.current
+      const range = selectedToolDef.range
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const dx = col - hc
+          const dy = row - hr
+          const tileDist = Math.sqrt(dx * dx + dy * dy)
+          if (tileDist <= range && !(dx === 0 && dy === 0)) {
+            ctx.fillStyle = 'rgba(232,196,74,0.12)'
+            ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+          }
         }
       }
     }
 
-    // ── Draw path previews ──
-    if (showPathPreview && currentPaths) {
-      Object.entries(currentPaths).forEach(([heroId, path]) => {
-        if (!path || path.length < 2) return
+    // ── Hover highlight ──
+    if (hoveredTile.current && phase === PHASE.PLAN) {
+      const { col, row } = hoveredTile.current
+      const x = col * TILE_SIZE
+      const y = row * TILE_SIZE
+      ctx.fillStyle = selectedTool ? 'rgba(232,196,74,0.18)' : 'rgba(200,200,200,0.08)'
+      ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
+      ctx.strokeStyle = selectedTool ? 'rgba(232,196,74,0.7)' : 'rgba(200,200,200,0.3)'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+    }
+
+    // ── Attack lines ──
+    if (currentFlashes.length > 0) {
+      const now = performance.now()
+      for (const flash of currentFlashes) {
+        const age = now - flash.t
+        const alpha = Math.max(0, 1 - age / 250)
         ctx.save()
-        ctx.strokeStyle = PATH_COLORS[heroId] ?? 'rgba(200,200,200,0.4)'
-        ctx.lineWidth = 3
-        ctx.lineCap = 'round'
-        ctx.setLineDash([6, 4])
+        ctx.globalAlpha = alpha * 0.7
+        ctx.strokeStyle = '#e8c44a'
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([4, 3])
         ctx.beginPath()
-        path.forEach((pt, i) => {
-          const px = pt.col * TILE_SIZE + TILE_SIZE / 2
-          const py = pt.row * TILE_SIZE + TILE_SIZE / 2
-          if (i === 0) ctx.moveTo(px, py)
-          else ctx.lineTo(px, py)
-        })
+        ctx.moveTo(flash.fromX, flash.fromY)
+        ctx.lineTo(flash.toX, flash.toY)
         ctx.stroke()
+        ctx.setLineDash([])
         ctx.restore()
-      })
+      }
     }
 
     // ── Draw heroes ──
@@ -151,20 +174,16 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.fill()
       ctx.restore()
 
-      // Hero circle
+      // Circle
       ctx.save()
-      if (hero.state === 'escaped') {
-        ctx.globalAlpha = 0.4
-      }
+      if (hero.state === 'escaped') ctx.globalAlpha = 0.4
       ctx.fillStyle = color
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 1.5
+      ctx.strokeStyle = hero.poisoned ? '#3d7a1a' : '#fff'
+      ctx.lineWidth = hero.poisoned ? 2 : 1.5
       ctx.beginPath()
       ctx.arc(x, y, 14, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
-
-      // Emoji label
       ctx.font = '14px serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
@@ -172,12 +191,10 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.restore()
 
       // HP bar
-      const barW = 28
-      const barH = 4
+      const barW = 28, barH = 4
       const barX = x - barW / 2
       const barY = y - 22
       const hpRatio = Math.max(0, hp / maxHp)
-
       ctx.fillStyle = '#1a1218'
       ctx.fillRect(barX, barY, barW, barH)
       ctx.fillStyle = hpRatio > 0.6 ? '#3d7a1a' : hpRatio > 0.3 ? '#c9a02a' : '#8b1a1a'
@@ -185,70 +202,53 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     }
 
     animFrame.current = requestAnimationFrame(draw)
-  // grid, heroes, previewedPaths are read via refs — no need to restart the loop on every update.
-  // Only restart when phase or tool selection changes (plan ↔ wave transitions, hover style).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, selectedTool, showPathPreview])
+  }, [phase, selectedTool, selectedToolDef])
 
   useEffect(() => {
     animFrame.current = requestAnimationFrame(draw)
-    return () => {
-      if (animFrame.current) cancelAnimationFrame(animFrame.current)
-    }
+    return () => { if (animFrame.current) cancelAnimationFrame(animFrame.current) }
   }, [draw])
 
   // ── Mouse handlers ──
-  const getTileFromEvent = (e) => {
+  const getTile = (e) => {
     const canvas = canvasRef.current
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
-    const px = (e.clientX - rect.left) * scaleX
-    const py = (e.clientY - rect.top) * scaleY
     return {
-      col: Math.floor(px / TILE_SIZE),
-      row: Math.floor(py / TILE_SIZE),
+      col: Math.floor((e.clientX - rect.left) * scaleX / TILE_SIZE),
+      row: Math.floor((e.clientY - rect.top)  * scaleY / TILE_SIZE),
     }
   }
 
   const handleMouseMove = (e) => {
-    const { col, row } = getTileFromEvent(e)
-    if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) {
-      hoveredTile.current = { col, row }
-    } else {
-      hoveredTile.current = null
-    }
+    const { col, row } = getTile(e)
+    hoveredTile.current = (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS)
+      ? { col, row }
+      : null
   }
 
-  const handleMouseLeave = () => {
-    hoveredTile.current = null
-  }
+  const handleMouseLeave = () => { hoveredTile.current = null }
 
   const handleClick = (e) => {
     if (phase !== PHASE.PLAN) return
-    const { col, row } = getTileFromEvent(e)
-    if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) {
-      onTileClick(col, row)
-    }
+    const { col, row } = getTile(e)
+    if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) onTileClick(col, row)
   }
 
   const handleContextMenu = (e) => {
     e.preventDefault()
     if (phase !== PHASE.PLAN) return
-    const { col, row } = getTileFromEvent(e)
-    if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) {
-      onTileRightClick(col, row)
-    }
+    const { col, row } = getTile(e)
+    if (col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS) onTileRightClick(col, row)
   }
-
-  const canvasW = GRID_COLS * TILE_SIZE
-  const canvasH = GRID_ROWS * TILE_SIZE
 
   return (
     <canvas
       ref={canvasRef}
-      width={canvasW}
-      height={canvasH}
+      width={GRID_COLS * TILE_SIZE}
+      height={GRID_ROWS * TILE_SIZE}
       style={{
         display: 'block',
         width: '100%',

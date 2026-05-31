@@ -1,11 +1,14 @@
 // ── Hero Simulation Engine ──
-// Runs each animation frame during Wave Phase.
-// Returns updated hero list and any events (trap triggers, deaths, etc.)
+// Heroes follow the fixed PATH_TILES in order.
+// Off-path towers scan for heroes within range each tick and attack.
+// On-path traps trigger when a hero steps on their tile.
 
-import { TILE, TILE_SIZE, HERO_KILL_GOLD, TREASURE_HERO_DAMAGE } from './constants.js'
-import { findPath } from './pathfinding.js'
+import {
+  TILE, TILE_SIZE, HERO_KILL_GOLD, TREASURE_HERO_DAMAGE,
+  PATH_TILES, DUNGEON_TOOLS,
+} from './constants.js'
 
-export function createHero(heroType, spawnIndex, entrance) {
+export function createHero(heroType, spawnIndex) {
   return {
     id: `hero_${Date.now()}_${spawnIndex}`,
     type: heroType.id,
@@ -16,37 +19,33 @@ export function createHero(heroType, spawnIndex, entrance) {
     maxHp: heroType.hp,
     speed: heroType.speed,
     canDisarm: heroType.canDisarm,
-    detectsTraps: heroType.detectsTraps,
     heals: heroType.heals,
-    fearFire: heroType.fearFire,
-    fearSpike: heroType.fearSpike,
-    // Grid position
-    col: entrance.col,
-    row: entrance.row,
-    // Pixel position (for smooth animation)
-    x: entrance.col * TILE_SIZE + TILE_SIZE / 2,
-    y: entrance.row * TILE_SIZE + TILE_SIZE / 2,
-    // Pathfinding state
-    path: [],
-    pathIndex: 0,
-    // State machine
-    state: 'moving', // moving | disarming | fighting | dead | escaped
-    disarmTimer: 0,
-    fightTarget: null,
-    spawnDelay: spawnIndex * 1200, // ms stagger between spawns
+    fireResist: heroType.fireResist ?? 1,
+    // Position — start at entrance (first path tile)
+    col: PATH_TILES[0].col,
+    row: PATH_TILES[0].row,
+    x: PATH_TILES[0].col * TILE_SIZE + TILE_SIZE / 2,
+    y: PATH_TILES[0].row * TILE_SIZE + TILE_SIZE / 2,
+    // Path progress
+    pathIndex: 0,         // current index in PATH_TILES
+    // State
+    state: 'moving',      // moving | dead | escaped
+    poisoned: false,
+    spawnDelay: spawnIndex * 1200,
     spawned: false,
-    // Tracking
     goldValue: HERO_KILL_GOLD[heroType.id] ?? 30,
   }
 }
 
-// Returns { heroes, events, treasureDamage, goldEarned }
-export function simulationTick(heroes, grid, entrance, treasure, deltaMs, trapTimers) {
+// ── Main tick ──
+// Returns { heroes, events, treasureDamage, goldEarned, trapTimers }
+export function simulationTick(heroes, grid, deltaMs, trapTimers) {
   const events = []
   let treasureDamage = 0
   let goldEarned = 0
   const updatedHeroes = []
 
+  // ── Pass 1: move heroes along the fixed path ──
   for (let hero of heroes) {
     if (hero.state === 'dead' || hero.state === 'escaped') {
       updatedHeroes.push(hero)
@@ -61,13 +60,28 @@ export function simulationTick(heroes, grid, entrance, treasure, deltaMs, trapTi
         continue
       }
       hero = { ...hero, spawned: true, spawnDelay: 0 }
-      // Calculate initial path
-      const path = findPath(grid, entrance, treasure, hero)
-      hero = { ...hero, path, pathIndex: 0 }
     }
 
-    // Check if hero reached treasure
-    if (hero.col === treasure.col && hero.row === treasure.row) {
+    // Poison DoT — 3 HP/s
+    if (hero.poisoned) {
+      hero = { ...hero, hp: hero.hp - 3 * (deltaMs / 1000) }
+    }
+
+    // Paladin passive heal — 5 HP/s to adjacent allies already processed
+    if (hero.heals) {
+      for (let other of updatedHeroes) {
+        const dist = Math.abs(other.col - hero.col) + Math.abs(other.row - hero.row)
+        if (dist <= 1 && other.state === 'moving' && other.hp < other.maxHp) {
+          other.hp = Math.min(other.maxHp, other.hp + 5 * (deltaMs / 1000))
+        }
+      }
+    }
+
+    // Move along path
+    const nextTile = PATH_TILES[hero.pathIndex + 1]
+
+    if (!nextTile) {
+      // Hero is already at the treasure tile
       treasureDamage += TREASURE_HERO_DAMAGE
       events.push({ type: 'treasure_reached', hero: hero.id, label: hero.label })
       hero = { ...hero, state: 'escaped' }
@@ -75,73 +89,57 @@ export function simulationTick(heroes, grid, entrance, treasure, deltaMs, trapTi
       continue
     }
 
-    // Move along path
-    if (hero.state === 'moving' && hero.path.length > 0) {
-      const target = hero.path[hero.pathIndex]
-      if (!target) {
+    const targetX = nextTile.col * TILE_SIZE + TILE_SIZE / 2
+    const targetY = nextTile.row * TILE_SIZE + TILE_SIZE / 2
+    const dx = targetX - hero.x
+    const dy = targetY - hero.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // Speed reduced if currently standing on a slowing tile (Iron Door)
+    const curTileId = grid[hero.row]?.[hero.col]
+    const doorDef = curTileId === TILE.DOOR
+      ? DUNGEON_TOOLS.find(t => t.id === TILE.DOOR)
+      : null
+    const speedMult = doorDef?.slow ?? 1
+    const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000) * speedMult
+
+    if (dist <= moveSpeed) {
+      // Arrived at next path tile
+      hero = {
+        ...hero,
+        x: targetX,
+        y: targetY,
+        col: nextTile.col,
+        row: nextTile.row,
+        pathIndex: hero.pathIndex + 1,
+      }
+
+      // Check for on-path trap at the tile we just arrived at
+      const tileId = grid[nextTile.row]?.[nextTile.col]
+      if (tileId && tileId !== TILE.PATH && tileId !== TILE.ENTRANCE && tileId !== TILE.TREASURE && tileId !== TILE.DOOR) {
+        const result = handleOnPathTrap(hero, tileId, nextTile, events)
+        hero = result.hero
+      }
+
+      // If hero just reached the last tile (treasure), mark escaped
+      if (hero.pathIndex >= PATH_TILES.length - 1) {
+        treasureDamage += TREASURE_HERO_DAMAGE
+        events.push({ type: 'treasure_reached', hero: hero.id, label: hero.label })
+        hero = { ...hero, state: 'escaped' }
         updatedHeroes.push(hero)
         continue
       }
-
-      const targetX = target.col * TILE_SIZE + TILE_SIZE / 2
-      const targetY = target.row * TILE_SIZE + TILE_SIZE / 2
-      const dx = targetX - hero.x
-      const dy = targetY - hero.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000)
-
-      if (dist <= moveSpeed) {
-        // Arrived at tile
-        hero = {
-          ...hero,
-          x: targetX,
-          y: targetY,
-          col: target.col,
-          row: target.row,
-          pathIndex: hero.pathIndex + 1,
-        }
-
-        // Check tile under hero
-        const tileId = grid[target.row]?.[target.col]
-        if (tileId) {
-          const result = handleTileInteraction(hero, tileId, target, events, trapTimers)
-          hero = result.hero
-          if (result.goldEarned) goldEarned += result.goldEarned
-        }
-
-        // Recalculate path occasionally (every 4 steps) for dynamic adjustment
-        if (hero.pathIndex % 4 === 0 && hero.state === 'moving') {
-          const newPath = findPath(grid, { col: hero.col, row: hero.row }, treasure, hero)
-          hero = { ...hero, path: newPath, pathIndex: 0 }
-        }
-      } else {
-        // Move toward target
-        hero = {
-          ...hero,
-          x: hero.x + (dx / dist) * moveSpeed,
-          y: hero.y + (dy / dist) * moveSpeed,
-        }
+    } else {
+      // Still moving toward next tile
+      hero = {
+        ...hero,
+        x: hero.x + (dx / dist) * moveSpeed,
+        y: hero.y + (dy / dist) * moveSpeed,
       }
     }
 
-    // Poison DoT tick — 3 HP/s ongoing after initial hit
-    if (hero.poisoned && hero.state === 'moving') {
-      hero = { ...hero, hp: hero.hp - (3 * deltaMs / 1000) }
-    }
-
-    // Paladin passive heal
-    if (hero.heals && hero.state === 'moving') {
-      for (let other of updatedHeroes) {
-        const dx = Math.abs(other.col - hero.col)
-        const dy = Math.abs(other.row - hero.row)
-        if (dx + dy <= 1 && other.state === 'moving' && other.hp < other.maxHp) {
-          other.hp = Math.min(other.maxHp, other.hp + (5 * deltaMs / 1000))
-        }
-      }
-    }
-
-    // Death check
-    if (hero.hp <= 0 && hero.state !== 'dead') {
+    // Death check (can happen from poison DoT between waypoints)
+    if (hero.hp <= 0 && hero.state === 'moving') {
       hero = { ...hero, state: 'dead', hp: 0 }
       goldEarned += hero.goldValue
       events.push({ type: 'hero_killed', hero: hero.id, label: hero.label, gold: hero.goldValue })
@@ -150,67 +148,97 @@ export function simulationTick(heroes, grid, entrance, treasure, deltaMs, trapTi
     updatedHeroes.push(hero)
   }
 
-  return { heroes: updatedHeroes, events, treasureDamage, goldEarned }
+  // ── Pass 2: tower range attacks ──
+  // Advance all tower cooldown timers, then fire if ready.
+  const updatedTimers = { ...trapTimers }
+
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      const tileId = grid[r][c]
+      const toolDef = DUNGEON_TOOLS.find(t => t.id === tileId && t.range)
+      if (!toolDef) continue
+
+      const timerKey = `tower_${c},${r}`
+      // Advance cooldown (initialise to full attack speed so first attack is immediate)
+      updatedTimers[timerKey] = (updatedTimers[timerKey] ?? toolDef.attackSpeed) + deltaMs
+
+      if (updatedTimers[timerKey] < toolDef.attackSpeed) continue  // still on cooldown
+
+      // Find closest hero in range
+      let target = null
+      let closestDist = Infinity
+      for (const h of updatedHeroes) {
+        if (!h.spawned || h.state !== 'moving') continue
+        const dx = h.col - c
+        const dy = h.row - r
+        const tileDist = Math.sqrt(dx * dx + dy * dy)
+        if (tileDist <= toolDef.range && tileDist < closestDist) {
+          target = h
+          closestDist = tileDist
+        }
+      }
+
+      if (target) {
+        const idx = updatedHeroes.indexOf(target)
+        if (idx >= 0) {
+          // Mage fire resistance
+          let dmg = toolDef.damage
+          if (tileId === TILE.FIRE && updatedHeroes[idx].fireResist !== undefined) {
+            dmg = Math.round(dmg * updatedHeroes[idx].fireResist)
+          }
+          updatedHeroes[idx] = {
+            ...updatedHeroes[idx],
+            hp: updatedHeroes[idx].hp - dmg,
+            poisoned: updatedHeroes[idx].poisoned || (toolDef.poisonOnHit ?? false),
+          }
+
+          // Death check after tower hit
+          if (updatedHeroes[idx].hp <= 0 && updatedHeroes[idx].state === 'moving') {
+            goldEarned += updatedHeroes[idx].goldValue
+            events.push({ type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label, gold: updatedHeroes[idx].goldValue })
+            updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
+          }
+
+          updatedTimers[timerKey] = 0  // reset attack cooldown
+          events.push({
+            type: 'tower_attack',
+            col: c, row: r,
+            heroId: target.id,
+            damage: dmg,
+            towerType: tileId,
+            // pixel coords for rendering attack line
+            fromX: c * TILE_SIZE + TILE_SIZE / 2,
+            fromY: r * TILE_SIZE + TILE_SIZE / 2,
+            toX: target.x,
+            toY: target.y,
+          })
+        }
+      }
+    }
+  }
+
+  return { heroes: updatedHeroes, events, treasureDamage, goldEarned, trapTimers: updatedTimers }
 }
 
-function handleTileInteraction(hero, tileId, tilePos, events, trapTimers) {
+// ── On-path trap interactions ──
+// Called when a hero arrives on a path tile that contains a trap.
+function handleOnPathTrap(hero, tileId, tilePos, events) {
   const trapKey = `${tilePos.col},${tilePos.row}`
 
   switch (tileId) {
     case TILE.SPIKE: {
-      // Pressure plate - triggers on step
       if (hero.canDisarm) {
         events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
         return { hero }
       }
-      events.push({ type: 'trap_triggered', trapKey, trap: 'spike' })
+      events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
       return { hero: { ...hero, hp: hero.hp - 25 } }
     }
 
-    case TILE.FIRE: {
-      // Only damages if timer is in the "active" phase
-      const timer = trapTimers[trapKey] ?? 0
-      const inBurst = (timer % 4000) < 1000 // active 1s out of every 4s
-      if (inBurst) {
-        events.push({ type: 'trap_triggered', trapKey, trap: 'fire' })
-        return { hero: { ...hero, hp: hero.hp - 35 } }
-      }
-      return { hero }
-    }
-
-    case TILE.POISON: {
-      events.push({ type: 'trap_triggered', trapKey, trap: 'poison' })
-      return { hero: { ...hero, hp: hero.hp - 10, poisoned: true } }
-    }
-
     case TILE.BOULDER: {
-      events.push({ type: 'trap_triggered', trapKey, trap: 'boulder' })
+      events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
+      // Boulder is single-use — caller should clear the tile; we just deal damage here
       return { hero: { ...hero, hp: hero.hp - 60 } }
-    }
-
-    case TILE.DART: {
-      // Fires a volley on a 3s timer — active for 0.5s each cycle
-      const timer = trapTimers[trapKey] ?? 0
-      const inBurst = (timer % 3000) < 500
-      if (inBurst) {
-        events.push({ type: 'trap_triggered', trapKey, trap: 'dart' })
-        return { hero: { ...hero, hp: hero.hp - 18 } }
-      }
-      return { hero }
-    }
-
-    case TILE.SKELETON:
-    case TILE.SLIME: {
-      // Monster deals damage when hero enters its tile
-      const monsterDmg = tileId === TILE.SKELETON ? 20 : 8
-      events.push({ type: 'combat', trapKey, monster: tileId })
-      return { hero: { ...hero, hp: hero.hp - monsterDmg } }
-    }
-
-    case TILE.WRAITH: {
-      // Wraith damages all heroes — Thief's disarm doesn't work on undead
-      events.push({ type: 'combat', trapKey, monster: 'wraith' })
-      return { hero: { ...hero, hp: hero.hp - 30 } }
     }
 
     default:

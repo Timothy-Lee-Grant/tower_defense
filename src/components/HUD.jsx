@@ -9,9 +9,7 @@ export default function HUD() {
   const bank           = useGameStore(s => s.bank)
   const treasureHp     = useGameStore(s => s.treasureHp)
   const heroesKilled   = useGameStore(s => s.heroesKilled)
-  const showPreview    = useGameStore(s => s.showPathPreview)
   const startWave      = useGameStore(s => s.startWave)
-  const togglePreview  = useGameStore(s => s.togglePathPreview)
   const goToMenu       = useGameStore(s => s.goToMenu)
 
   const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
@@ -63,18 +61,9 @@ export default function HUD() {
       {/* Action buttons */}
       <div style={styles.actions}>
         {phase === PHASE.PLAN && (
-          <>
-            <button
-              style={{ ...styles.btn, ...(showPreview ? styles.btnActive : {}) }}
-              onClick={togglePreview}
-              title="Preview hero pathfinding routes"
-            >
-              👁 Paths
-            </button>
-            <button style={styles.btnPrimary} onClick={startWave}>
-              ⚔ Send Them In
-            </button>
-          </>
+          <button style={styles.btnPrimary} onClick={startWave}>
+            ⚔ Send Them In
+          </button>
         )}
         {phase === PHASE.WAVE && (
           <div style={styles.waveIndicator}>
