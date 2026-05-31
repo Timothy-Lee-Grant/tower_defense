@@ -208,9 +208,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
       ctx.restore()
 
-      // HP bar (always drawn, outside the hero save/restore)
-      const barW  = 30
-      const barH  = 4
+      // HP bar
+      const barW  = 30, barH = 4
       const barX  = x - barW / 2
       const barY  = y - 28
       const ratio = Math.max(0, hp / maxHp)
@@ -218,10 +217,21 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.fillRect(barX, barY, barW, barH)
       ctx.fillStyle = ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'
       ctx.fillRect(barX, barY, barW * ratio, barH)
-      // bar border
       ctx.strokeStyle = 'rgba(255,255,255,0.15)'
       ctx.lineWidth = 0.5
       ctx.strokeRect(barX, barY, barW, barH)
+
+      // Gold-carrying indicator — pulsing coin above the HP bar
+      if (hero.hasGold) {
+        const pulse = 0.7 + 0.3 * Math.sin(t * 0.008 + hero.pathIndex)
+        ctx.save()
+        ctx.globalAlpha = pulse
+        ctx.font = '11px serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('💰', x, barY - 8)
+        ctx.restore()
+      }
     }
 
     animFrame.current = requestAnimationFrame(draw)

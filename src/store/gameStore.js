@@ -4,7 +4,7 @@ import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
   STARTING_GOLD, SELL_REFUND_RATE, WAVE_CONFIGS,
   TREASURE_MAX_HP, HERO_TYPES,
-  PATH_TILES, PATH_SET, ENTRANCE, TREASURE,
+  PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
 
@@ -14,7 +14,8 @@ function makeInitialGrid() {
   const grid = Array.from({ length: GRID_ROWS }, () =>
     Array(GRID_COLS).fill(TILE.EMPTY)
   )
-  for (const pt of PATH_TILES) {
+  // Mark all path tiles (centerline + width extras)
+  for (const pt of PATH_ALL) {
     grid[pt.row][pt.col] = TILE.PATH
   }
   grid[ENTRANCE.row][ENTRANCE.col]  = TILE.ENTRANCE
@@ -112,12 +113,14 @@ export const useGameStore = create((set, get) => ({
     if (!toolDef) return
     if (gold < toolDef.cost) return
 
-    // Placement rules: on-path traps need a PATH tile; towers need an EMPTY tile
-    const isPathTile = PATH_SET.has(`${col},${row}`) ||
+    // On-path traps must go on the WALKABLE centerline (not just any visual path tile)
+    const isOnCenterline = PATH_CENTER_SET.has(`${col},${row}`) ||
       currentTile === TILE.SPIKE || currentTile === TILE.BOULDER || currentTile === TILE.DOOR
+    // Off-path towers need a completely empty (non-path) tile
+    const isAnyPathTile  = PATH_SET.has(`${col},${row}`)
 
-    if (toolDef.placesOn === 'path' && !isPathTile) return
-    if (toolDef.placesOn === 'open' && (isPathTile || currentTile !== TILE.EMPTY)) return
+    if (toolDef.placesOn === 'path' && !isOnCenterline) return
+    if (toolDef.placesOn === 'open' && (isAnyPathTile || currentTile !== TILE.EMPTY)) return
 
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = selectedTool
@@ -176,10 +179,13 @@ export const useGameStore = create((set, get) => ({
       // Build log entries
       const newLogEntries = result.events.map(ev => {
         if (ev.type === 'hero_killed')      return `☠️ ${ev.label} defeated (+${ev.gold}g)`
-        if (ev.type === 'treasure_reached') return `💀 ${ev.label} reached your treasure!`
+        if (ev.type === 'treasure_reached') return `💰 ${ev.label} grabbed the gold — they're heading back!`
+        if (ev.type === 'hero_escaped')     return ev.hadGold
+          ? `🏃 ${ev.label} escaped with the gold!`
+          : `🏃 ${ev.label} fled empty-handed.`
         if (ev.type === 'trap_triggered')   return `⚡ ${ev.label ?? 'Hero'} hit a ${ev.trap}`
         if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a spike`
-        if (ev.type === 'tower_attack')     return null  // too noisy for the log
+        if (ev.type === 'tower_attack')     return null
         return null
       }).filter(Boolean)
 
