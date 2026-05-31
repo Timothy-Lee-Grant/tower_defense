@@ -221,11 +221,11 @@ export const useGameStore = create((set, get) => ({
         battleLog: [...state.battleLog.slice(-30), ...newLogEntries],
       })
 
-      // Check wave end: all heroes resolved
-      const allDone = result.heroes.every(h => h.state === 'dead' || h.state === 'escaped' || !h.spawned)
-      const allSpawned = result.heroes.every(h => h.spawned || h.spawnDelay <= 0)
+      // Check wave end: every hero must have actually spawned AND be in a terminal state.
+      // Unspawned heroes (still counting down) are never considered "done".
+      const waveOver = result.heroes.every(h => h.spawned && (h.state === 'dead' || h.state === 'escaped'))
 
-      if (allSpawned && allDone) {
+      if (waveOver) {
         get().endWave()
         return
       }

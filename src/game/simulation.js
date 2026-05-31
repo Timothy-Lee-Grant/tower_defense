@@ -124,6 +124,11 @@ export function simulationTick(heroes, grid, entrance, treasure, deltaMs, trapTi
       }
     }
 
+    // Poison DoT tick — 3 HP/s ongoing after initial hit
+    if (hero.poisoned && hero.state === 'moving') {
+      hero = { ...hero, hp: hero.hp - (3 * deltaMs / 1000) }
+    }
+
     // Paladin passive heal
     if (hero.heals && hero.state === 'moving') {
       for (let other of updatedHeroes) {
@@ -183,12 +188,29 @@ function handleTileInteraction(hero, tileId, tilePos, events, trapTimers) {
       return { hero: { ...hero, hp: hero.hp - 60 } }
     }
 
+    case TILE.DART: {
+      // Fires a volley on a 3s timer — active for 0.5s each cycle
+      const timer = trapTimers[trapKey] ?? 0
+      const inBurst = (timer % 3000) < 500
+      if (inBurst) {
+        events.push({ type: 'trap_triggered', trapKey, trap: 'dart' })
+        return { hero: { ...hero, hp: hero.hp - 18 } }
+      }
+      return { hero }
+    }
+
     case TILE.SKELETON:
     case TILE.SLIME: {
-      // Simple: monster deals damage when hero enters its tile
+      // Monster deals damage when hero enters its tile
       const monsterDmg = tileId === TILE.SKELETON ? 20 : 8
       events.push({ type: 'combat', trapKey, monster: tileId })
       return { hero: { ...hero, hp: hero.hp - monsterDmg } }
+    }
+
+    case TILE.WRAITH: {
+      // Wraith damages all heroes — Thief's disarm doesn't work on undead
+      events.push({ type: 'combat', trapKey, monster: 'wraith' })
+      return { hero: { ...hero, hp: hero.hp - 30 } }
     }
 
     default:
