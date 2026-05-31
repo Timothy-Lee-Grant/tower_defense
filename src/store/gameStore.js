@@ -152,6 +152,9 @@ export const useGameStore = create((set, get) => ({
           : `💨 ${ev.label} fled empty-handed.`
         if (ev.type === 'trap_triggered')   return `⚡ ${ev.label} hit a ${ev.trap}`
         if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a spike`
+        if (ev.type === 'curse_applied')    return ev.stacks === 3
+          ? `👁️ ${ev.label} fully cursed — all damage +45%!`
+          : `👁️ ${ev.label} cursed (stack ${ev.stacks}/3)`
         return null
       }).filter(Boolean)
 
@@ -233,7 +236,9 @@ export const useGameStore = create((set, get) => ({
     const locked   = DUNGEON_TOOLS.filter(t => !unlockedTools.includes(t.id))
     const shuffled = [...locked].sort(() => Math.random() - 0.5)
     const cards    = shuffled.slice(0, Math.min(3, shuffled.length)).map(tool => ({ type: 'unlock', tool }))
-    while (cards.length < 3) cards.push({ type: 'gold', amount: 80 })
+    // Gold reward scales with wave: 80g at wave 1, up to 200g at wave 14
+    const goldReward = Math.min(80 + waveIndex * 12, 200)
+    while (cards.length < 3) cards.push({ type: 'gold', amount: goldReward })
 
     set({
       phase:         PHASE.RESULTS,

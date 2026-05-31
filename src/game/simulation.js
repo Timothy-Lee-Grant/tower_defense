@@ -275,6 +275,15 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         // Shadow Stalker double damage vs gold carriers
         if (toolDef.targetGoldCarriers && h.hasGold) dmg = dmg * 2
 
+        // Cursed Idol: emit event so battle log can surface new stacks
+        if (toolDef.curseOnHit && h.curseStacks < 3) {
+          events.push({
+            type:   'curse_applied',
+            label:  h.label,
+            stacks: Math.min(3, h.curseStacks + 1),
+          })
+        }
+
         // Vampire Bat drain: permanently reduce maxHp
         const newMaxHp = toolDef.drainOnHit
           ? Math.max(1, h.maxHp - dmg)

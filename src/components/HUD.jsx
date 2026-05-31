@@ -20,7 +20,12 @@ export default function HUD() {
       {/* Left: wave info */}
       <div style={styles.section}>
         <span style={styles.label}>WAVE</span>
-        <span style={styles.bigValue}>{waveIndex + 1}</span>
+        <span style={styles.bigValue}>
+          {waveIndex + 1}
+          <span style={{ fontSize: '0.6em', opacity: 0.55, fontWeight: 400 }}>
+            {' '}/ {WAVE_CONFIGS.length}
+          </span>
+        </span>
         {waveConfig && (
           <span style={styles.waveLabel}>{waveConfig.label}</span>
         )}

@@ -199,7 +199,7 @@ export const DUNGEON_TOOLS = [
   },
   {
     id: TILE.TROLL, category: TOOL_CATEGORY.MONSTERS,
-    label: 'Cave Troll', emoji: '🧌', cost: 110, damage: 40,
+    label: 'Cave Troll', emoji: '🧌', cost: 130, damage: 35,
     range: 2, attackSpeed: 2600, aoeAttack: true,
     placesOn: 'open',
     description: 'Beside path. Slow swing, but hits EVERY hero in range at once. Devastating against grouped parties.',
@@ -294,23 +294,26 @@ export const HERO_TYPES = {
   cleric: {
     id: 'cleric', label: 'Cleric', emoji: '✝️',
     hp: 200, speed: 0.9, color: '#dce8f0',
-    description: 'Heals nearby allies at 12 HP/s. A dedicated field medic — far stronger than a Paladin.',
-    canDisarm: false, heals: true, healAmount: 12,
+    description: 'Heals nearby allies at 12 HP/s and passively self-heals at 3 HP/s. The strongest dedicated healer.',
+    canDisarm: false, heals: true, healAmount: 12, selfHealRate: 3,
     goldSpeedMult: 0.85,
   },
   archmage: {
     id: 'archmage', label: 'Archmage', emoji: '🔮',
     hp: 220, speed: 1.1, color: '#bf3abf',
-    description: 'Self-heals at 6 HP/s and softly heals nearby allies at 2 HP/s. Near-immune to fire. Immune to slows.',
-    canDisarm: false, heals: false, fireResist: 0.15, immuneToSlow: true,
-    selfHealRate: 6, partyHealRate: 2,
+    // fireResist 0.30: takes 30% of fire damage. selfHealRate 4: fire vent (40*0.30=12 dmg) barely wins
+    // over 2-second heal (4*2=8), so fire vents CAN slowly kill it — but it takes a cluster.
+    description: 'Self-heals at 4 HP/s and softly heals nearby allies at 2 HP/s. Highly fire-resistant. Immune to slows.',
+    canDisarm: false, heals: false, fireResist: 0.30, immuneToSlow: true,
+    selfHealRate: 4, partyHealRate: 2,
     goldSpeedMult: 0.6,
   },
   champion: {
     id: 'champion', label: 'Champion', emoji: '⚜️',
-    hp: 700, speed: 0.85, color: '#c8a020',
-    description: 'Legendary warrior. Enormous HP and takes only 50% damage from all sources. The dungeon\'s greatest threat.',
-    canDisarm: false, heals: false, damageReduction: 0.5,
+    // 600 HP + 45% DR = 1090 effective HP (down from 1400). Still the toughest unit but beatable.
+    hp: 600, speed: 0.85, color: '#c8a020',
+    description: 'Legendary warrior. Enormous HP and takes only 45% damage from all sources. The dungeon\'s greatest threat.',
+    canDisarm: false, heals: false, damageReduction: 0.45,
     goldSpeedMult: 0.95,
   },
 }
@@ -327,7 +330,7 @@ export const WAVE_CONFIGS = [
   { wave: 6,  heroes: ['knight','knight','mage','thief','paladin'],                                   gold: 260, label: 'The Siege Begins' },
   { wave: 7,  heroes: ['knight','knight','knight','mage','mage','paladin'],                           gold: 300, label: 'They Are Not Giving Up' },
   // Tier 3 — new threats (waves 8-10)
-  { wave: 8,  heroes: ['berserker','knight','knight','mage','paladin'],                               gold: 280, label: 'The Rage Begins' },
+  { wave: 8,  heroes: ['berserker','knight','knight','mage','paladin'],                               gold: 320, label: 'The Rage Begins' },
   { wave: 9,  heroes: ['ranger','ranger','berserker','knight','mage','thief'],                        gold: 310, label: 'Swift as Shadows' },
   { wave: 10, heroes: ['berserker','berserker','ranger','knight','mage','paladin'],                   gold: 340, label: 'The Brute Squad' },
   // Tier 4 — elite compositions (waves 11-12)
