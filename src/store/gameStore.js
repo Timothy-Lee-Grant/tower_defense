@@ -114,8 +114,9 @@ export const useGameStore = create((set, get) => ({
     const { waveIndex } = get()
     const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
 
+    const hpMult = waveConfig.hpMult ?? 1
     const heroes = waveConfig.heroes.map((heroId, i) =>
-      createHero(HERO_TYPES[heroId], i)
+      createHero(HERO_TYPES[heroId], i, hpMult)
     )
 
     set({

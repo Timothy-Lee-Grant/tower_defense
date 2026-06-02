@@ -316,35 +316,84 @@ export const HERO_TYPES = {
     canDisarm: false, heals: false, damageReduction: 0.45,
     goldSpeedMult: 0.95,
   },
+
+  // ── Tier 4 heroes (waves 9+) ───────────────────────────────────────────────
+  warlord: {
+    id: 'warlord', label: 'Warlord', emoji: '🪖',
+    hp: 480, speed: 1.0, color: '#8b1a1a',
+    description: 'Destroys ALL on-path traps — spikes, boulders, lava. Your entire on-path investment becomes irrelevant.',
+    canDisarm: true, heals: false, boulderResist: true,
+    // canDisarm handles spikes; boulderResist handles boulders; lava still applies
+    goldSpeedMult: 0.9,
+  },
+  regenerator: {
+    id: 'regenerator', label: 'Regenerator', emoji: '🌿',
+    hp: 320, speed: 1.05, color: '#20a060',
+    description: 'Self-heals at 20 HP/s. Burst damage barely registers. Requires sustained overlapping fire to kill.',
+    canDisarm: false, heals: false,
+    selfHealRate: 20,
+    goldSpeedMult: 1.0,
+  },
 }
 
 // ── Wave Compositions ──────────────────────────────────────────────────────
+// hpMult: multiplied against each hero's base HP (and healing, proportionally).
+// This counteracts the player's compounding defensive investment — by wave 14
+// the dungeon has ~50× more DPS than wave 1, so heroes need proportionally
+// more HP or they melt before reaching the treasure.
+//
+// Rough target: at each wave, a hero should survive ~2-3 tower clusters even
+// with a well-built dungeon, keeping every round tense.
 export const WAVE_CONFIGS = [
-  // Tier 1 — tutorial curve (waves 1-3)
-  { wave: 1,  heroes: ['knight','knight','knight'],                                                   gold: 120, label: 'The First Scouting Party' },
-  { wave: 2,  heroes: ['knight','knight','thief'],                                                    gold: 140, label: 'They Brought a Lockpick' },
-  { wave: 3,  heroes: ['knight','mage','thief'],                                                      gold: 160, label: 'Mixed Tactics' },
-  // Tier 2 — full classic roster (waves 4-7)
-  { wave: 4,  heroes: ['knight','knight','mage','thief'],                                             gold: 190, label: 'A Full Party' },
-  { wave: 5,  heroes: ['knight','mage','thief','paladin'],                                            gold: 220, label: 'They Brought a Healer' },
-  { wave: 6,  heroes: ['knight','knight','mage','thief','paladin'],                                   gold: 260, label: 'The Siege Begins' },
-  { wave: 7,  heroes: ['knight','knight','knight','mage','mage','paladin'],                           gold: 300, label: 'They Are Not Giving Up' },
-  // Tier 3 — new threats (waves 8-10)
-  { wave: 8,  heroes: ['berserker','knight','knight','mage','paladin'],                               gold: 320, label: 'The Rage Begins' },
-  { wave: 9,  heroes: ['ranger','ranger','berserker','knight','mage','thief'],                        gold: 310, label: 'Swift as Shadows' },
-  { wave: 10, heroes: ['berserker','berserker','ranger','knight','mage','paladin'],                   gold: 340, label: 'The Brute Squad' },
-  // Tier 4 — elite compositions (waves 11-12)
-  { wave: 11, heroes: ['berserker','ranger','knight','mage','paladin','cleric'],                      gold: 380, label: 'They Brought a Cleric' },
-  { wave: 12, heroes: ['berserker','berserker','ranger','ranger','mage','paladin','cleric'],          gold: 420, label: 'The Veteran Warband' },
-  // Tier 5 — near-impossible (waves 13-14)
-  { wave: 13, heroes: ['archmage','berserker','ranger','knight','paladin','cleric','thief'],          gold: 460, label: 'The Arcane Host' },
-  { wave: 14, heroes: ['champion','archmage','berserker','ranger','cleric','paladin','thief'],        gold: 500, label: "The Champion's Crusade" },
+  // ── Tier 1: Tutorial (waves 1–3) ─────────────────────────────────────────
+  // Baseline HP. Player is still learning tools and path coverage.
+  { wave: 1,  hpMult: 1.0, gold: 120, label: 'The First Scouting Party',
+    heroes: ['knight','knight','knight'] },
+  { wave: 2,  hpMult: 1.0, gold: 140, label: 'They Brought a Lockpick',
+    heroes: ['knight','knight','thief'] },
+  { wave: 3,  hpMult: 1.2, gold: 160, label: 'Mixed Tactics',
+    heroes: ['knight','knight','mage','thief'] },
+
+  // ── Tier 2: Full Classic Roster (waves 4–7) ──────────────────────────────
+  // HP starts scaling to match the dungeon growing from 250g → ~1500g invested.
+  { wave: 4,  hpMult: 1.5, gold: 190, label: 'A Full Party',
+    heroes: ['knight','knight','mage','thief','paladin'] },
+  { wave: 5,  hpMult: 1.9, gold: 220, label: 'They Brought a Healer',
+    heroes: ['knight','knight','mage','mage','thief','paladin'] },
+  { wave: 6,  hpMult: 2.4, gold: 260, label: 'The Siege Begins',
+    heroes: ['knight','knight','knight','mage','thief','paladin','thief'] },
+  { wave: 7,  hpMult: 3.0, gold: 300, label: 'They Are Not Giving Up',
+    heroes: ['knight','knight','knight','mage','mage','thief','paladin'] },
+
+  // ── Tier 3: New Threats (waves 8–10) ─────────────────────────────────────
+  // Berserker / ranger debut. HP scaled to ~3–4.5× — dungeon ~3000–5000g.
+  { wave: 8,  hpMult: 3.5, gold: 320, label: 'The Rage Begins',
+    heroes: ['berserker','knight','knight','mage','paladin','ranger','thief'] },
+  { wave: 9,  hpMult: 4.0, gold: 360, label: 'Swift as Shadows',
+    heroes: ['ranger','ranger','berserker','berserker','knight','mage','thief','paladin'] },
+  { wave: 10, hpMult: 4.8, gold: 400, label: 'The Brute Squad',
+    heroes: ['berserker','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric'] },
+
+  // ── Tier 4: Elite Compositions (waves 11–12) ─────────────────────────────
+  // Warlord and Regenerator debut. Players with lava/boulder-heavy dungeons
+  // now face a hero that neutralises their on-path investments.
+  { wave: 11, hpMult: 5.5, gold: 440, label: 'The Warlord Leads the Charge',
+    heroes: ['warlord','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric','regenerator'] },
+  { wave: 12, hpMult: 6.5, gold: 480, label: 'The Veteran Warband',
+    heroes: ['warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'] },
+
+  // ── Tier 5: Near-Impossible (waves 13–14) ────────────────────────────────
+  // Archmage + arcane host. Full roster pressure — dungeon ~8500–11000g invested.
+  { wave: 13, hpMult: 7.5, gold: 500, label: 'The Arcane Host',
+    heroes: ['archmage','warlord','warlord','berserker','berserker','ranger','ranger','knight','paladin','cleric','regenerator','thief'] },
+  { wave: 14, hpMult: 9.0, gold: 550, label: "The Champion's Crusade",
+    heroes: ['champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'] },
 ]
 
 // ── Economy ────────────────────────────────────────────────────────────────
 export const STARTING_GOLD         = 250     // bumped from 200 — longer path needs more setup
 export const SELL_REFUND_RATE      = 0.5
-export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100 }
+export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100, warlord: 60, regenerator: 50 }
 export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero who has the treasure
 export const TREASURE_MAX_HP       = 300
 export const TREASURE_HERO_DAMAGE  = 80

@@ -851,6 +851,187 @@ export function drawChampion(ctx, cx, cy, t, hero = {}) {
 }
 
 
+// Warlord: battle-scarred red-and-black armour, twin weapons, destroys all traps
+export function drawWarlord(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.007) * 1.8
+  const lean = swing(t, 0.007) * 0.07
+  const lLeg = swing(t, 0.009) * 7
+  const rLeg = -lLeg
+  const fury = osc(t, 0.006)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+  ctx.rotate(lean)
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.32)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 13, 5, 0, 0, Math.PI * 2); ctx.fill()
+
+  // greaves
+  ctx.fillStyle = '#3a1010'
+  ctx.fillRect(-8, 8 + lLeg * 0.4, 7, 10); ctx.fillRect(1, 8 + rLeg * 0.4, 7, 10)
+  ctx.fillStyle = '#2a0808'
+  ctx.fillRect(-9, 16 + lLeg * 0.4, 8, 3); ctx.fillRect(1, 16 + rLeg * 0.4, 8, 3)
+
+  // body — black plate with red trim
+  ctx.fillStyle = '#1a1010'
+  ctx.fillRect(-11, -8, 22, 18)
+  ctx.fillStyle = '#2a1818'
+  ctx.fillRect(-10, -7, 20, 16)
+  // red trim lines
+  ctx.fillStyle = '#8b1a1a'
+  ctx.fillRect(-10, -7, 20, 2); ctx.fillRect(-10, 7, 20, 2)
+  ctx.fillRect(-10, -7, 2, 16); ctx.fillRect(8, -7, 2, 16)
+  // battle wear
+  ctx.fillStyle = '#4a0808'
+  ctx.fillRect(-7, -2, 3, 2); ctx.fillRect(4, 2, 3, 2)
+  // fury glow on chest (active aggression)
+  ctx.fillStyle = `rgba(180,30,30,${0.06 + fury * 0.10})`
+  ctx.fillRect(-10, -7, 20, 16)
+
+  // wide pauldrons
+  ctx.fillStyle = '#2a1010'
+  ctx.fillRect(-18, -10, 8, 7); ctx.fillRect(10, -10, 8, 7)
+  ctx.fillStyle = '#8b1a1a'
+  ctx.fillRect(-17, -9, 3, 5); ctx.fillRect(14, -9, 3, 5)
+
+  // right weapon — heavy war axe
+  const axeSw = swing(t, 0.007) * 3
+  ctx.fillStyle = '#3a2010'
+  ctx.fillRect(12 + axeSw * 0.3, -26 + axeSw, 4, 36)
+  ctx.fillStyle = '#7a7888'
+  ctx.fillRect(10 + axeSw * 0.3, -30 + axeSw, 12, 5)
+  ctx.fillRect(10 + axeSw * 0.3, -25 + axeSw, 12, 5)
+  ctx.fillStyle = '#a0a0b0'
+  ctx.fillRect(11 + axeSw * 0.3, -29 + axeSw, 10, 4)
+  ctx.fillStyle = 'rgba(200,80,20,0.7)'
+  ctx.fillRect(21 + axeSw * 0.3, -29 + axeSw, 2, 8) // blood on edge
+
+  // left arm + short sword
+  ctx.fillStyle = '#2a1010'
+  ctx.fillRect(-20, -8, 8, 12)
+  ctx.fillStyle = '#c8c8d8'
+  ctx.fillRect(-18, -18, 2, 22) // blade
+  ctx.fillStyle = '#d8a030'
+  ctx.fillRect(-20, -10, 6, 2) // crossguard
+
+  // helmet — full-face war helm
+  ctx.fillStyle = '#1a1010'
+  ctx.fillRect(-9, -26, 18, 20)
+  ctx.fillStyle = '#2a1818'
+  ctx.fillRect(-7, -30, 14, 7)
+  // red battle markings
+  ctx.fillStyle = '#8b1a1a'
+  ctx.fillRect(-6, -26, 12, 2)
+  ctx.fillRect(-6, -26, 2, 10); ctx.fillRect(4, -26, 2, 10)
+  // narrow visor slit
+  ctx.fillStyle = '#0a0808'
+  ctx.fillRect(-7, -22, 14, 4)
+  ctx.fillStyle = `rgba(200,50,50,${0.55 + fury * 0.45})`
+  ctx.fillRect(-6, -21, 5, 2); ctx.fillRect(1, -21, 5, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-20, -30, 42, 52)
+  }
+  ctx.restore()
+}
+
+
+// Regenerator: nature-druid wrapped in pulsing green healing energy, minimal armour
+export function drawRegenerator(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.006) * 1.5
+  const lLeg = swing(t, 0.008) * 5
+  const rLeg = -lLeg
+  const heal = osc(t, 0.005)      // heal pulse
+  const aura = osc(t, 0.003)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // large healing aura — bright green
+  ctx.fillStyle = `rgba(30,200,80,${0.05 + aura * 0.09})`
+  ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill()
+  // second pulsing ring
+  ctx.fillStyle = `rgba(80,255,120,${0.02 + heal * 0.06})`
+  ctx.beginPath(); ctx.arc(0, 0, 34, 0, Math.PI * 2); ctx.fill()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 10, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // legs — wrapped in green cloth
+  ctx.fillStyle = '#1a4a20'
+  ctx.fillRect(-5, 6 + lLeg * 0.3, 4, 10); ctx.fillRect(1, 6 + rLeg * 0.3, 4, 10)
+  ctx.fillStyle = '#2a3818'
+  ctx.fillRect(-6, 14 + lLeg * 0.3, 5, 3); ctx.fillRect(1, 14 + rLeg * 0.3, 5, 3)
+
+  // robe — flowing deep green
+  ctx.fillStyle = '#1a4a20'
+  ctx.fillRect(-8, -7, 16, 14)
+  ctx.fillRect(-10, 5, 20, 8) // hem
+  ctx.fillStyle = '#224a28'
+  ctx.fillRect(-7, -6, 14, 12)
+  // leaf-vein pattern on robe
+  ctx.fillStyle = `rgba(60,220,80,${0.18 + heal * 0.20})`
+  ctx.fillRect(-1, -5, 2, 11)
+  ctx.fillRect(-4, -1, 8, 2)
+  ctx.fillRect(-3, 3, 6, 2)
+
+  // glowing staff (healing light at tip)
+  const stSw = swing(t, 0.004) * 2
+  ctx.fillStyle = '#2a4818'
+  ctx.fillRect(10 + stSw * 0.3, -30 + stSw * 0.5, 3, 46)
+  // leaf cluster at top
+  ctx.fillStyle = `rgba(50,200,70,${0.4 + heal * 0.5})`
+  ctx.beginPath(); ctx.arc(11 + stSw * 0.3, -32 + stSw * 0.5, 10, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = `rgba(100,255,120,${0.5 + heal * 0.5})`
+  ctx.beginPath(); ctx.arc(11 + stSw * 0.3, -32 + stSw * 0.5, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(200,255,200,0.8)'
+  ctx.beginPath(); ctx.arc(9 + stSw * 0.3, -34 + stSw * 0.5, 2.5, 0, Math.PI * 2); ctx.fill()
+  // orbiting leaf particles
+  const leafAngle = t * 0.003
+  for (let i = 0; i < 3; i++) {
+    const a = leafAngle + (i / 3) * Math.PI * 2
+    const lx = (11 + stSw * 0.3) + Math.cos(a) * 13
+    const ly = (-32 + stSw * 0.5) + Math.sin(a) * 8
+    ctx.fillStyle = `rgba(60,220,80,${0.45 + heal * 0.4})`
+    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // left arm
+  ctx.fillStyle = '#1a4a20'
+  ctx.fillRect(-17, -6, 7, 10)
+  ctx.fillStyle = '#c8b890'
+  ctx.fillRect(-18, 3, 6, 4)
+
+  // head
+  ctx.fillStyle = '#c8b890'
+  ctx.fillRect(-6, -18, 12, 12)
+  // eyes — glowing green
+  ctx.fillStyle = '#1a2a10'
+  ctx.fillRect(-4, -14, 3, 3); ctx.fillRect(1, -14, 3, 3)
+  ctx.fillStyle = `rgba(50,220,80,${0.6 + heal * 0.4})`
+  ctx.fillRect(-3, -13, 2, 2); ctx.fillRect(2, -13, 2, 2)
+  // gentle smile
+  ctx.fillStyle = '#8a6040'
+  ctx.fillRect(-3, -9, 6, 1)
+
+  // woven green hood
+  ctx.fillStyle = '#1a4a20'
+  ctx.fillRect(-7, -26, 14, 12); ctx.fillRect(-5, -30, 10, 6)
+  // white trim
+  ctx.fillStyle = 'rgba(200,255,200,0.5)'
+  ctx.fillRect(-6, -26, 12, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(50,220,80,0.18)'
+    ctx.fillRect(-18, -30, 38, 52)
+  }
+  ctx.restore()
+}
+
+
 // ── TILE SPRITES ─────────────────────────────────────────────────────────────
 // Each takes (ctx, tx, ty, t) where tx/ty = tile top-left (multiples of TILE_SIZE=48)
 
@@ -2144,15 +2325,17 @@ export function drawGargoyleTile(ctx, tx, ty, t) {
 // ── Sprite maps ──────────────────────────────────────────────────────────────
 
 export const HERO_SPRITES = {
-  knight:    drawKnight,
-  mage:      drawMage,
-  thief:     drawThief,
-  paladin:   drawPaladin,
-  berserker: drawBerserker,
-  ranger:    drawRanger,
-  cleric:    drawCleric,
-  archmage:  drawArchmage,
-  champion:  drawChampion,
+  knight:      drawKnight,
+  mage:        drawMage,
+  thief:       drawThief,
+  paladin:     drawPaladin,
+  berserker:   drawBerserker,
+  ranger:      drawRanger,
+  cleric:      drawCleric,
+  archmage:    drawArchmage,
+  champion:    drawChampion,
+  warlord:     drawWarlord,
+  regenerator: drawRegenerator,
 }
 
 export const TILE_SPRITES = {

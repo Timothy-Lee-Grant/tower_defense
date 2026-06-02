@@ -21,15 +21,21 @@ import {
 
 // ── Hero factory ───────────────────────────────────────────────────────────
 
-export function createHero(heroType, spawnIndex) {
+// hpMult scales HP and healing proportionally to the wave's difficulty.
+// Healing scales as sqrt(hpMult) so healers stay useful but don't trivialise damage.
+// goldValue scales so kill rewards reflect the effort involved.
+export function createHero(heroType, spawnIndex, hpMult = 1) {
+  const scaledHp    = Math.round(heroType.hp * hpMult)
+  const healScale   = Math.sqrt(hpMult)    // gentler scaling so healing never trivialises damage
+  const baseGold    = HERO_KILL_GOLD[heroType.id] ?? 30
   return {
     id:             `hero_${Date.now()}_${spawnIndex}`,
     type:           heroType.id,
     label:          heroType.label,
     emoji:          heroType.emoji,
     color:          heroType.color,
-    hp:             heroType.hp,
-    maxHp:          heroType.hp,
+    hp:             scaledHp,
+    maxHp:          scaledHp,
     speed:          heroType.speed,
     canDisarm:      heroType.canDisarm,
     heals:          heroType.heals,
@@ -45,19 +51,20 @@ export function createHero(heroType, spawnIndex) {
     state:          'moving',   // moving | dead | escaped
     poisoned:       false,
     slowed:         false,
-    slowTimer:      0,          // ms of slow remaining
+    slowTimer:      0,
     hasGold:        false,
     spawnDelay:     spawnIndex * HERO_SPAWN_STAGGER_MS,
     spawned:        false,
-    goldValue:      HERO_KILL_GOLD[heroType.id] ?? 30,
-    // Tier-3+ abilities
+    goldValue:      Math.round(baseGold * Math.max(1, hpMult * 0.65)),
+    // Abilities (scale healing with healScale so they remain proportionally relevant)
     immuneToSlow:    heroType.immuneToSlow    ?? false,
     immuneToPoison:  heroType.immuneToPoison  ?? false,
     damageReduction: heroType.damageReduction ?? 0,
-    healAmount:      heroType.healAmount      ?? 5,
-    selfHealRate:    heroType.selfHealRate     ?? 0,
-    partyHealRate:   heroType.partyHealRate    ?? 0,
-    curseStacks:     0,   // stacked by Cursed Idol — amplifies all tower damage taken
+    boulderResist:   heroType.boulderResist   ?? false,
+    healAmount:      +((heroType.healAmount   ?? 5)  * healScale).toFixed(1),
+    selfHealRate:    +((heroType.selfHealRate  ?? 0)  * healScale).toFixed(1),
+    partyHealRate:   +((heroType.partyHealRate ?? 0)  * healScale).toFixed(1),
+    curseStacks:     0,
   }
 }
 
@@ -341,6 +348,11 @@ function handleOnPathTrap(hero, tileId, tilePos, events) {
       return { hero: { ...hero, hp: hero.hp - spikeDmg } }
     }
     case TILE.BOULDER: {
+      // Warlord: destroys boulders without damage
+      if (hero.boulderResist) {
+        events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
+        return { hero }
+      }
       const boulderDmg = Math.round(60 * (1 - hero.damageReduction))
       events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
       return { hero: { ...hero, hp: hero.hp - boulderDmg } }
