@@ -119,8 +119,14 @@ export const useGameStore = create((set, get) => ({
     )
 
     set({
-      phase: PHASE.WAVE,
+      phase:         PHASE.WAVE,
       heroes,
+      // Always reset treasure HP at the start of each wave so a previous
+      // loss doesn't cause the new wave to end on the very first tick.
+      treasureHp:    TREASURE_MAX_HP,
+      heroesKilled:  0,
+      heroesEscapedWithGold: 0,
+      heroesEscapedEmpty:    0,
       battleLog: [`⚔ Wave ${waveIndex + 1}: ${waveConfig.label}`],
       goldEarnedThisWave: 0,
       goldStolenThisWave: 0,

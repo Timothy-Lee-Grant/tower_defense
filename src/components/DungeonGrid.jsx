@@ -277,10 +277,11 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
   const handleMouseMove  = (e) => { const p = getTile(e); hoveredTile.current = inBounds(p) ? p : null }
   const handleMouseLeave = ()  => { hoveredTile.current = null }
-  const handleClick      = (e) => { if (phase !== PHASE.PLAN) return; const p = getTile(e); if (inBounds(p)) onTileClick(p.col, p.row) }
+  const canEdit = phase === PHASE.PLAN || phase === PHASE.WAVE
+  const handleClick      = (e) => { if (!canEdit) return; const p = getTile(e); if (inBounds(p)) onTileClick(p.col, p.row) }
   const handleContextMenu = (e) => {
     e.preventDefault()
-    if (phase !== PHASE.PLAN) return
+    if (!canEdit) return
     const p = getTile(e)
     if (inBounds(p)) onTileRightClick(p.col, p.row)
   }
@@ -294,7 +295,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         display: 'block',
         width: '100%',
         height: '100%',
-        cursor: phase === PHASE.PLAN ? (selectedTool ? 'crosshair' : 'default') : 'default',
+        cursor: canEdit ? (selectedTool ? 'crosshair' : 'default') : 'default',
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}

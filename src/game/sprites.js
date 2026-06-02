@@ -1427,6 +1427,12 @@ export const ATTACK_DURATIONS = {
   slime:    370,
   skeleton: 430,
   wraith:   700,   // rush-to-target + return
+  // New monsters
+  troll:    500,   // ground-slam shockwave
+  bat:      280,   // quick dark dash
+  shadow:   380,   // shadowy tendril
+  idol:     450,   // slow curse bolt
+  gargoyle: 320,   // stone spike
 }
 
 // Easing helpers
@@ -1639,6 +1645,144 @@ export function drawAttackEffect(ctx, flash, now) {
           )
         }
       }
+      break
+    }
+
+    // ── Troll: ground-shockwave ring expanding from tower tile (AoE) ──────────
+    case 'troll': {
+      const ring = easeOut2(progress)
+      const maxR = 30 + ring * 28
+      ctx.translate(fromX, fromY)
+      // Outer ring
+      ctx.strokeStyle = `rgba(100,160,50,${0.7 * (1 - progress)})`
+      ctx.lineWidth = 4 * (1 - progress * 0.6)
+      ctx.beginPath(); ctx.arc(0, 0, maxR, 0, Math.PI * 2); ctx.stroke()
+      // Inner ring
+      ctx.strokeStyle = `rgba(160,220,80,${0.45 * (1 - progress)})`
+      ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(0, 0, maxR * 0.55, 0, Math.PI * 2); ctx.stroke()
+      // Ground crack lines
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2
+        const r = maxR * 0.6
+        ctx.strokeStyle = `rgba(80,120,30,${0.4 * (1 - progress)})`
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(Math.cos(a) * 8, Math.sin(a) * 8)
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r)
+        ctx.stroke()
+      }
+      break
+    }
+
+    // ── Bat: dark crimson dash from bat to target ─────────────────────────────
+    case 'bat': {
+      const p  = easeOut2(progress)
+      const cx = px(p), cy = py(p)
+      // Blood-red trail
+      for (let i = 1; i <= 4; i++) {
+        const tp = Math.max(0, p - i * 0.10)
+        ctx.globalAlpha = (1 - progress) * 0.20
+        ctx.fillStyle = '#8b0000'
+        ctx.beginPath(); ctx.arc(px(tp), py(tp), 5 - i, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 0.85 - progress * 0.3
+      // Bat silhouette (simplified wing shape)
+      ctx.translate(cx, cy); ctx.rotate(angle)
+      ctx.fillStyle = '#2a0818'
+      ctx.beginPath()
+      ctx.moveTo(0, 0); ctx.lineTo(-10, -5); ctx.lineTo(-6, 2); ctx.lineTo(0, 0)
+      ctx.lineTo(10, -5); ctx.lineTo(6, 2); ctx.closePath(); ctx.fill()
+      // Fangs impact
+      if (progress > 0.7) {
+        const ia = (progress - 0.7) / 0.3
+        ctx.globalAlpha = ia * 0.65
+        ctx.fillStyle = '#cc0020'
+        ctx.beginPath(); ctx.arc(0, 0, 6 * ia, 0, Math.PI * 2); ctx.fill()
+      }
+      break
+    }
+
+    // ── Shadow Stalker: dark tendril stretching to target ─────────────────────
+    case 'shadow': {
+      const p   = progress          // linear — eerie
+      const cx  = px(p), cy = py(p)
+      const wob = Math.sin(age * 0.022) * 5
+      // Wispy tendril segments
+      for (let i = 0; i <= 8; i++) {
+        const t2 = i / 8
+        if (t2 > p) break
+        const sx = fromX + (toX - fromX) * t2 + Math.sin(age * 0.015 + i) * wob
+        const sy = fromY + (toY - fromY) * t2 + Math.cos(age * 0.012 + i) * wob * 0.6
+        ctx.globalAlpha = (1 - t2) * 0.55 * (1 - progress * 0.4)
+        ctx.fillStyle = '#5a0080'
+        ctx.beginPath(); ctx.arc(sx, sy, 5 - t2 * 2, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 0.8 - progress * 0.5
+      // Impact flash
+      ctx.fillStyle = `rgba(140,0,200,${0.5 * (1 - progress)})`
+      ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = `rgba(200,80,255,${0.7 * (1 - progress)})`
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill()
+      break
+    }
+
+    // ── Cursed Idol: slow wobbling curse orb ─────────────────────────────────
+    case 'idol': {
+      const p   = progress * 0.85    // deliberately slow / ominous
+      const wobX = Math.sin(age * 0.016) * 6
+      const wobY = Math.cos(age * 0.011) * 4
+      const cx   = px(p) + wobX
+      const cy   = py(p) + wobY
+      const sz   = 7 + Math.sin(age * 0.02) * 2
+      // Outer haze
+      ctx.globalAlpha = 0.18 * (1 - progress)
+      ctx.fillStyle = '#6600aa'
+      ctx.beginPath(); ctx.arc(cx, cy, sz + 12, 0, Math.PI * 2); ctx.fill()
+      // Curse bolt body
+      ctx.globalAlpha = 0.88 - progress * 0.25
+      ctx.fillStyle = '#3d0066'
+      ctx.beginPath(); ctx.arc(cx, cy, sz, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = `rgba(180,0,255,${0.9 - progress * 0.3})`
+      ctx.beginPath(); ctx.arc(cx, cy, sz - 2, 0, Math.PI * 2); ctx.fill()
+      // Spinning eye slit
+      const spin = age * 0.008
+      ctx.fillStyle = 'rgba(0,0,0,0.8)'
+      ctx.save()
+      ctx.translate(cx, cy); ctx.rotate(spin)
+      ctx.beginPath(); ctx.ellipse(0, 0, sz - 2, 1.5, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.restore()
+      // Highlight
+      ctx.fillStyle = 'rgba(220,140,255,0.75)'
+      ctx.beginPath(); ctx.arc(cx - sz * 0.3, cy - sz * 0.35, sz * 0.28, 0, Math.PI * 2); ctx.fill()
+      break
+    }
+
+    // ── Gargoyle: stone spike hurled at the most advanced hero ───────────────
+    case 'gargoyle': {
+      const p    = easeOut2(progress)
+      const cx   = px(p), cy = py(p)
+      const spin = age * 0.02
+      // Debris trail
+      for (let i = 1; i <= 3; i++) {
+        const tp = Math.max(0, p - i * 0.09)
+        ctx.globalAlpha = (1 - progress) * 0.18
+        ctx.fillStyle = '#6a6878'
+        ctx.beginPath(); ctx.arc(px(tp), py(tp), 5 - i, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.globalAlpha = 1
+      ctx.translate(cx, cy); ctx.rotate(spin + angle)
+      // Stone chunk — irregular rectangle
+      ctx.fillStyle = '#5a5868'
+      ctx.fillRect(-7, -5, 14, 10)
+      ctx.fillStyle = '#6a6878'
+      ctx.fillRect(-5, -6, 10, 12)
+      // Stone edge shards
+      ctx.fillStyle = '#4a4858'
+      ctx.fillRect(-8, -2, 3, 4); ctx.fillRect(5, -3, 3, 6)
+      // Crack highlight
+      ctx.fillStyle = 'rgba(200,200,220,0.35)'
+      ctx.fillRect(-3, -4, 1, 8); ctx.fillRect(1, -3, 1, 6)
       break
     }
 

@@ -18,10 +18,9 @@ export default function GameScreen() {
 
       {/* Main content row */}
       <div style={styles.body}>
-        {/* Left sidebar: tool palette (plan phase) or battle log (wave phase) */}
+        {/* Left sidebar: tool palette always visible so player can build during waves */}
         <div style={styles.sidebar}>
-          {phase === PHASE.PLAN && <ToolPalette />}
-          {phase === PHASE.WAVE && <BattleLog />}
+          <ToolPalette />
         </div>
 
         {/* Center: dungeon grid */}
@@ -32,17 +31,11 @@ export default function GameScreen() {
           />
         </div>
 
-        {/* Right sidebar: always shows battle log when available */}
-        {phase === PHASE.PLAN && (
-          <div style={styles.rightPanel}>
-            <PlanHints />
-          </div>
-        )}
-        {phase === PHASE.WAVE && (
-          <div style={styles.rightPanel}>
-            <WavePanel />
-          </div>
-        )}
+        {/* Right sidebar: incoming threat (plan) or live battle log (wave) */}
+        <div style={styles.rightPanel}>
+          {phase === PHASE.PLAN && <PlanHints />}
+          {phase === PHASE.WAVE && <BattleLog />}
+        </div>
       </div>
     </div>
   )
@@ -83,6 +76,7 @@ function PlanHints() {
           ['Right click', 'Sell tile (50% refund)'],
           ['👁 Paths', 'Preview hero routes'],
           ['Select tool', 'Click tool then click grid'],
+          ['During wave', 'Still place & sell tiles'],
           ['⚔ Send Them In', 'Begin the wave'],
         ].map(([key, val]) => (
           <div key={key} style={styles.controlRow}>
@@ -95,25 +89,7 @@ function PlanHints() {
   )
 }
 
-function WavePanel() {
-  return (
-    <div style={styles.hints}>
-      <div style={styles.hintsHeader}>💀 GERALD'S NOTES</div>
-      <p style={styles.geraldNote}>
-        "During active invasion events, I recommend against panic-placing
-        traps. The budget committee has reviewed this. You cannot place
-        during a wave. This is final."
-      </p>
-      <p style={{ ...styles.geraldNote, marginTop: '0.75rem', opacity: 0.7 }}>
-        "Watch the heroes' paths carefully. Note their weaknesses.
-        Adjust your layout before the next wave accordingly."
-      </p>
-      <p style={{ ...styles.geraldNote, marginTop: '0.75rem', opacity: 0.5 }}>
-        "— Gerald, Skeleton MBA, Dungeon Operations Division"
-      </p>
-    </div>
-  )
-}
+// WavePanel removed — BattleLog is now shown on the right during waves.
 
 const styles = {
   root: {
