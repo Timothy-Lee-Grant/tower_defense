@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
+import { DIFFICULTIES } from '../game/constants.js'
 
 const CONSULTANT_QUIPS = [
   '"Your spike trap placement last session lacked synergy. I\'ve filed a report."',
@@ -10,7 +11,9 @@ const CONSULTANT_QUIPS = [
 ]
 
 export default function MainMenu() {
-  const startGame = useGameStore(s => s.startGame)
+  const startGame      = useGameStore(s => s.startGame)
+  const setDifficulty  = useGameStore(s => s.setDifficulty)
+  const difficulty     = useGameStore(s => s.difficulty)
   const [quip] = useState(() => CONSULTANT_QUIPS[Math.floor(Math.random() * CONSULTANT_QUIPS.length)])
   const [visible, setVisible] = useState(false)
 
@@ -18,6 +21,8 @@ export default function MainMenu() {
     const t = setTimeout(() => setVisible(true), 100)
     return () => clearTimeout(t)
   }, [])
+
+  const handleStart = () => startGame()
 
   return (
     <div style={styles.root}>
@@ -45,15 +50,39 @@ export default function MainMenu() {
           <p style={styles.memoText}>{quip}</p>
         </div>
 
-        {/* Buttons */}
-        <div style={styles.buttonGroup}>
-          <button style={styles.primaryBtn} onClick={startGame}>
-            ⚔ Begin Campaign
-          </button>
-          <button style={styles.secondaryBtn} onClick={startGame}>
-            🏛 Sandbox Mode
-          </button>
+        {/* Difficulty selector */}
+        <div style={styles.diffSection}>
+          <div style={styles.diffLabel}>— Select Difficulty —</div>
+          <div style={styles.diffCards}>
+            {Object.values(DIFFICULTIES).map(diff => {
+              const selected = difficulty === diff.id
+              return (
+                <button
+                  key={diff.id}
+                  style={{
+                    ...styles.diffCard,
+                    borderColor: selected ? diff.borderColor.replace('0.5','0.9') : diff.borderColor,
+                    background:  selected ? `rgba(${hexToRgb(diff.color)},0.12)` : 'rgba(255,255,255,0.03)',
+                    boxShadow:   selected ? `0 0 16px ${diff.borderColor}` : 'none',
+                  }}
+                  onClick={() => setDifficulty(diff.id)}
+                >
+                  <div style={{ fontSize: '1.6rem', marginBottom: '0.3rem' }}>{diff.emoji}</div>
+                  <div style={{ ...styles.diffCardLabel, color: selected ? diff.color : 'var(--bone)' }}>
+                    {diff.label}
+                  </div>
+                  <div style={styles.diffCardTagline}>{diff.tagline}</div>
+                  <div style={styles.diffCardDesc}>{diff.description}</div>
+                </button>
+              )
+            })}
+          </div>
         </div>
+
+        {/* Start button */}
+        <button style={styles.primaryBtn} onClick={handleStart}>
+          ⚔ Begin Campaign
+        </button>
 
         {/* Subtitle */}
         <p style={styles.tagline}>
@@ -65,6 +94,14 @@ export default function MainMenu() {
       </div>
     </div>
   )
+}
+
+// Helper: extract RGB values from a hex color string for rgba()
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16)
+  const g = parseInt(hex.slice(3,5),16)
+  const b = parseInt(hex.slice(5,7),16)
+  return `${r},${g},${b}`
 }
 
 function particleStyle(i) {
@@ -166,11 +203,57 @@ const styles = {
     fontSize: '1rem',
     lineHeight: 1.6,
   },
-  buttonGroup: {
+  diffSection: {
     display: 'flex',
-    gap: '1rem',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.75rem',
+    width: '100%',
+  },
+  diffLabel: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.65rem',
+    letterSpacing: '0.2em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+  },
+  diffCards: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '0.75rem',
+    width: '100%',
+    maxWidth: 540,
+  },
+  diffCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.2rem',
+    padding: '1rem 0.75rem',
+    borderRadius: 8,
+    border: '1px solid',
+    cursor: 'pointer',
+    transition: 'all 0.18s ease',
+    textAlign: 'center',
+  },
+  diffCardLabel: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+  },
+  diffCardTagline: {
+    fontFamily: "'Crimson Text', serif",
+    fontStyle: 'italic',
+    fontSize: '0.8rem',
+    color: 'var(--text-secondary)',
+    marginBottom: '0.2rem',
+  },
+  diffCardDesc: {
+    fontFamily: "'Crimson Text', serif",
+    fontSize: '0.72rem',
+    color: 'var(--text-muted)',
+    lineHeight: 1.4,
   },
   primaryBtn: {
     background: 'var(--gold-mid)',

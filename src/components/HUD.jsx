@@ -1,6 +1,6 @@
 import React from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { WAVE_CONFIGS, TREASURE_MAX_HP } from '../game/constants.js'
+import { WAVE_CONFIGS, DIFFICULTIES } from '../game/constants.js'
 
 export default function HUD() {
   const phase          = useGameStore(s => s.phase)
@@ -12,8 +12,11 @@ export default function HUD() {
   const startWave      = useGameStore(s => s.startWave)
   const goToMenu       = useGameStore(s => s.goToMenu)
 
-  const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
-  const hpRatio = treasureHp / TREASURE_MAX_HP
+  const difficulty    = useGameStore(s => s.difficulty)
+  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
+  const waveConfig    = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
+  const diff          = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
+  const hpRatio       = treasureHp / treasureMaxHp
 
   return (
     <div style={styles.hud}>
@@ -29,6 +32,20 @@ export default function HUD() {
         {waveConfig && (
           <span style={styles.waveLabel}>{waveConfig.label}</span>
         )}
+        {/* Difficulty badge */}
+        <span style={{
+          fontFamily: "'Cinzel', serif",
+          fontSize: '0.52rem',
+          letterSpacing: '0.1em',
+          color: diff.color,
+          border: `1px solid ${diff.borderColor}`,
+          borderRadius: 3,
+          padding: '1px 5px',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+        }}>
+          {diff.emoji} {diff.label}
+        </span>
       </div>
 
       {/* Center: treasure HP */}
@@ -36,7 +53,7 @@ export default function HUD() {
         <div style={styles.treasureHeader}>
           <span style={styles.label}>★ TREASURE</span>
           <span style={{ ...styles.label, color: hpRatio < 0.3 ? '#8b1a1a' : 'var(--gold-dim)' }}>
-            {Math.ceil(treasureHp)} / {TREASURE_MAX_HP}
+            {Math.ceil(treasureHp)} / {treasureMaxHp}
           </span>
         </div>
         <div style={styles.hpTrack}>

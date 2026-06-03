@@ -392,6 +392,39 @@ export const WAVE_CONFIGS = [
 
 // ── Economy ────────────────────────────────────────────────────────────────
 export const STARTING_GOLD         = 250     // bumped from 200 — longer path needs more setup
+// ── Difficulty Settings ────────────────────────────────────────────────────
+// hpScaling: controls how steeply hero HP grows with each wave.
+//   effectiveMult = 1.0 + (waveMult - 1.0) * hpScaling
+//   Wave 1 is identical on all difficulties (waveMult 1.0 → result 1.0).
+//   The gap opens in later waves where waveMult reaches 9.0 on hard.
+//
+// waveGoldMult: multiplier applied to each wave's planning gold budget.
+// startingGold: gold available for wave 1 setup.
+// treasureHp: how much damage the treasure can absorb before the run ends.
+export const DIFFICULTIES = {
+  easy: {
+    id: 'easy', label: 'Easy', emoji: '🌿',
+    tagline: 'More gold, gentler scaling.',
+    description: 'Heroes scale at 35% the hard rate. +50% wave gold. Good for learning trap placement.',
+    color: '#20a060', borderColor: 'rgba(32,160,96,0.5)',
+    startingGold: 450, waveGoldMult: 1.5, treasureHp: 500, hpScaling: 0.35,
+  },
+  medium: {
+    id: 'medium', label: 'Medium', emoji: '⚔️',
+    tagline: 'A real fight every round.',
+    description: 'Heroes scale at 65% the hard rate. +20% wave gold. Balanced challenge throughout.',
+    color: '#c8a048', borderColor: 'rgba(200,160,72,0.5)',
+    startingGold: 350, waveGoldMult: 1.2, treasureHp: 400, hpScaling: 0.65,
+  },
+  hard: {
+    id: 'hard', label: 'Hard', emoji: '💀',
+    tagline: 'Exponential. Good luck.',
+    description: 'Full HP scaling. Standard gold. Heroes grow dramatically tougher every wave.',
+    color: '#8b1a1a', borderColor: 'rgba(139,26,26,0.5)',
+    startingGold: 250, waveGoldMult: 1.0, treasureHp: 300, hpScaling: 1.0,
+  },
+}
+
 export const SELL_REFUND_RATE      = 0.5
 export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100, warlord: 60, regenerator: 50 }
 export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero who has the treasure

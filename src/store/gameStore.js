@@ -2,8 +2,8 @@
 import { create } from 'zustand'
 import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
-  STARTING_GOLD, SELL_REFUND_RATE, WAVE_CONFIGS,
-  TREASURE_MAX_HP, HERO_TYPES,
+  SELL_REFUND_RATE, WAVE_CONFIGS,
+  HERO_TYPES, DIFFICULTIES,
   PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
@@ -26,8 +26,11 @@ export const useGameStore = create((set, get) => ({
   selectedTool:   null,
   selectedCategory: 'traps',
 
+  // Difficulty
+  difficulty:     'medium',
+
   // Economy
-  gold:           STARTING_GOLD,
+  gold:           DIFFICULTIES.medium.startingGold,
   bank:           0,
   unlockedTools:  DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
 
@@ -37,8 +40,9 @@ export const useGameStore = create((set, get) => ({
   trapTimers:     {},
   simulationRef:  null,
 
-  // Wave stats
-  treasureHp:     TREASURE_MAX_HP,
+  // Wave stats — treasureMaxHp tracks the difficulty-specific ceiling for the HP bar ratio
+  treasureMaxHp:  DIFFICULTIES.medium.treasureHp,
+  treasureHp:     DIFFICULTIES.medium.treasureHp,
   heroesKilled:   0,
   heroesEscapedWithGold: 0,   // escaped AND had the treasure
   heroesEscapedEmpty:    0,   // got scared off / escaped without loot (edge case)
@@ -52,14 +56,21 @@ export const useGameStore = create((set, get) => ({
 
   // ── Actions ────────────────────────────────────────────────────────────
 
+  setDifficulty(id) {
+    const diff = DIFFICULTIES[id] ?? DIFFICULTIES.medium
+    set({ difficulty: id, treasureMaxHp: diff.treasureHp, treasureHp: diff.treasureHp })
+  },
+
   startGame() {
+    const diff = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
     set({
       phase: PHASE.PLAN,
       grid:  makeInitialGrid(),
-      gold:  STARTING_GOLD,
+      gold:  diff.startingGold,
       bank:  0,
       waveIndex: 0,
-      treasureHp: TREASURE_MAX_HP,
+      treasureMaxHp: diff.treasureHp,
+      treasureHp:    diff.treasureHp,
       heroesKilled: 0,
       heroesEscapedWithGold: 0,
       heroesEscapedEmpty:    0,
@@ -114,17 +125,20 @@ export const useGameStore = create((set, get) => ({
     const { waveIndex } = get()
     const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
 
-    const hpMult = waveConfig.hpMult ?? 1
+    const diff     = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    const waveMult = waveConfig.hpMult ?? 1
+    // effectiveMult: wave 1 is identical across all difficulties (waveMult=1 → result=1).
+    // The gap widens in later waves where waveMult reaches 9.0 on hard.
+    const effectiveMult = 1.0 + (waveMult - 1.0) * diff.hpScaling
     const heroes = waveConfig.heroes.map((heroId, i) =>
-      createHero(HERO_TYPES[heroId], i, hpMult)
+      createHero(HERO_TYPES[heroId], i, effectiveMult)
     )
 
     set({
       phase:         PHASE.WAVE,
       heroes,
-      // Always reset treasure HP at the start of each wave so a previous
-      // loss doesn't cause the new wave to end on the very first tick.
-      treasureHp:    TREASURE_MAX_HP,
+      // Reset treasure HP to difficulty-correct ceiling each wave.
+      treasureHp:    get().treasureMaxHp,
       heroesKilled:  0,
       heroesEscapedWithGold: 0,
       heroesEscapedEmpty:    0,
@@ -236,22 +250,26 @@ export const useGameStore = create((set, get) => ({
   },
 
   endWave() {
-    const { simulationRef, waveIndex, unlockedTools } = get()
+    const { simulationRef, waveIndex, unlockedTools, difficulty } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
+
+    const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
 
     // Generate upgrade cards
     const locked   = DUNGEON_TOOLS.filter(t => !unlockedTools.includes(t.id))
     const shuffled = [...locked].sort(() => Math.random() - 0.5)
     const cards    = shuffled.slice(0, Math.min(3, shuffled.length)).map(tool => ({ type: 'unlock', tool }))
-    // Gold reward scales with wave: 80g at wave 1, up to 200g at wave 14
-    const goldReward = Math.min(80 + waveIndex * 12, 200)
+    // Gold reward scales with wave AND difficulty
+    const goldReward = Math.round(Math.min(80 + waveIndex * 12, 200) * diff.waveGoldMult)
     while (cards.length < 3) cards.push({ type: 'gold', amount: goldReward })
 
+    // Apply waveGoldMult to the next wave's planning budget
+    const baseGold = WAVE_CONFIGS[waveIndex + 1]?.gold ?? 300
     set({
       phase:         PHASE.RESULTS,
       simulationRef: null,
       upgradeCards:  cards,
-      gold:          WAVE_CONFIGS[waveIndex + 1]?.gold ?? 300,
+      gold:          Math.round(baseGold * diff.waveGoldMult),
       attackFlashes: [],
     })
   },
