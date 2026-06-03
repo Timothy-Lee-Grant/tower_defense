@@ -17,7 +17,7 @@ export default function ToolPalette() {
   const selectTool     = useGameStore(s => s.selectTool)
   const selectCategory = useGameStore(s => s.selectCategory)
 
-  const isDisabled = phase !== PHASE.PLAN
+  const isDisabled = phase !== PHASE.PLAN && phase !== PHASE.WAVE
 
   const tools = DUNGEON_TOOLS.filter(t => t.category === selectedCat)
 
