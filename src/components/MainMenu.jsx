@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { DIFFICULTIES } from '../game/constants.js'
+import { audio } from '../audio/audioEngine.js'
 
 const CONSULTANT_QUIPS = [
   '"Your spike trap placement last session lacked synergy. I\'ve filed a report."',
@@ -22,7 +23,17 @@ export default function MainMenu() {
     return () => clearTimeout(t)
   }, [])
 
-  const handleStart = () => startGame()
+  const handleStart = () => {
+    audio.init()          // safe to call multiple times; no-ops after first init
+    audio.play('btn_click')
+    startGame()
+  }
+
+  const handleDifficultySelect = (id) => {
+    audio.init()
+    setDifficulty(id)
+    audio.play('difficulty_' + id)
+  }
 
   return (
     <div style={styles.root}>
@@ -65,7 +76,7 @@ export default function MainMenu() {
                     background:  selected ? `rgba(${hexToRgb(diff.color)},0.12)` : 'rgba(255,255,255,0.03)',
                     boxShadow:   selected ? `0 0 16px ${diff.borderColor}` : 'none',
                   }}
-                  onClick={() => setDifficulty(diff.id)}
+                  onClick={() => handleDifficultySelect(diff.id)}
                 >
                   <div style={{ fontSize: '1.6rem', marginBottom: '0.3rem' }}>{diff.emoji}</div>
                   <div style={{ ...styles.diffCardLabel, color: selected ? diff.color : 'var(--bone)' }}>

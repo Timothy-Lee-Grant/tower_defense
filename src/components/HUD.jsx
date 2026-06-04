@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useState, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { WAVE_CONFIGS, DIFFICULTIES } from '../game/constants.js'
+import { audio } from '../audio/audioEngine.js'
 
 export default function HUD() {
   const phase          = useGameStore(s => s.phase)
@@ -17,6 +18,22 @@ export default function HUD() {
   const waveConfig    = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
   const diff          = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
   const hpRatio       = treasureHp / treasureMaxHp
+
+  // ── Audio controls state ──────────────────────────────────────────────────
+  const [muted,      setMuted]      = useState(() => audio.muted)
+  const [volume,     setVolume]     = useState(() => audio.masterVolume)
+  const [audioOpen,  setAudioOpen]  = useState(false)
+
+  const handleMute = useCallback(() => {
+    const nowMuted = audio.toggleMute()
+    setMuted(nowMuted)
+  }, [])
+
+  const handleVolume = useCallback((e) => {
+    const v = parseFloat(e.target.value)
+    setVolume(v)
+    audio.setMasterVolume(v)
+  }, [])
 
   return (
     <div style={styles.hud}>
@@ -95,6 +112,38 @@ export default function HUD() {
             </span>
           </div>
         )}
+        {/* Audio controls */}
+        <div style={{ position: 'relative' }}>
+          <button
+            style={styles.menuBtn}
+            onClick={() => setAudioOpen(o => !o)}
+            title="Audio settings"
+          >
+            {muted ? '🔇' : volume > 0.5 ? '🔊' : '🔉'}
+          </button>
+          {audioOpen && (
+            <div style={styles.audioPanel}>
+              <div style={styles.audioPanelRow}>
+                <button
+                  style={{ ...styles.muteBtn, color: muted ? '#8b1a1a' : 'var(--gold-dim)' }}
+                  onClick={handleMute}
+                >
+                  {muted ? '🔇 Muted' : '🔊 On'}
+                </button>
+              </div>
+              <div style={styles.audioPanelRow}>
+                <span style={styles.audioLabel}>Volume</span>
+                <input
+                  type="range" min="0" max="1" step="0.05"
+                  value={volume}
+                  onChange={handleVolume}
+                  style={styles.slider}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <button style={styles.menuBtn} onClick={goToMenu} title="Back to main menu">
           ☰
         </button>
@@ -213,6 +262,49 @@ const styles = {
   wavePulse: {
     fontSize: '1rem',
     animation: 'pulse 1s ease-in-out infinite',
+  },
+  audioPanel: {
+    position: 'absolute',
+    bottom: '110%',
+    right: 0,
+    background: '#0d0b0e',
+    border: '1px solid rgba(232,196,74,0.2)',
+    borderRadius: 6,
+    padding: '0.6rem 0.75rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    minWidth: 160,
+    zIndex: 100,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+  },
+  audioPanelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  audioLabel: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.58rem',
+    color: 'var(--text-muted)',
+    letterSpacing: '0.08em',
+    whiteSpace: 'nowrap',
+  },
+  muteBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 4,
+    padding: '0.25rem 0.5rem',
+    fontSize: '0.72rem',
+    fontFamily: "'Cinzel', serif",
+    cursor: 'pointer',
+    width: '100%',
+    letterSpacing: '0.05em',
+  },
+  slider: {
+    flex: 1,
+    accentColor: 'var(--gold-mid)',
+    cursor: 'pointer',
   },
 }
 

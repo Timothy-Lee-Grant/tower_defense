@@ -7,6 +7,7 @@ import {
   PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
+import { audio } from '../audio/audioEngine.js'
 
 // ── Grid factory ───────────────────────────────────────────────────────────
 function makeInitialGrid() {
@@ -106,6 +107,7 @@ export const useGameStore = create((set, get) => ({
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = selectedTool
     set({ grid: newGrid, gold: gold - def.cost })
+    audio.play('tile_placed')
   },
 
   removeTile(col, row) {
@@ -119,6 +121,7 @@ export const useGameStore = create((set, get) => ({
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = PATH_CENTER_SET.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
     set({ grid: newGrid, gold: gold + refund })
+    audio.play('tile_removed')
   },
 
   startWave() {
@@ -133,6 +136,8 @@ export const useGameStore = create((set, get) => ({
     const heroes = waveConfig.heroes.map((heroId, i) =>
       createHero(HERO_TYPES[heroId], i, effectiveMult)
     )
+
+    audio.play('wave_start')
 
     set({
       phase:         PHASE.WAVE,
@@ -159,6 +164,40 @@ export const useGameStore = create((set, get) => ({
       lastTime = now
 
       const result = simulationTick(state.heroes, state.grid, deltaMs, state.trapTimers)
+
+      // ── Audio events ───────────────────────────────────────────────────────
+      result.events.forEach(ev => {
+        switch (ev.type) {
+          case 'trap_triggered':
+            audio.play(ev.trap === 'boulder' ? 'boulder_crush' : 'spike_trigger')
+            break
+          case 'trap_disarmed':
+            audio.play('trap_disarmed')
+            break
+          case 'lava_damage':
+            audio.play('lava_damage')
+            break
+          case 'hero_killed':
+            audio.play('hero_death')
+            break
+          case 'treasure_reached':
+            audio.play('gold_pickup')
+            break
+          case 'hero_escaped':
+            if (ev.hadGold) audio.play('hero_escaped_gold')
+            break
+          case 'tower_attack':
+            audio.play(ev.towerType + '_fire')
+            break
+          case 'curse_applied':
+            audio.play('curse_applied')
+            break
+          default: break
+        }
+      })
+
+      // When treasure takes damage, play the ominous warning
+      if (result.treasureDamage > 0) audio.play('treasure_damaged')
 
       // Build battle log entries
       const newLog = result.events.map(ev => {
@@ -252,6 +291,7 @@ export const useGameStore = create((set, get) => ({
   endWave() {
     const { simulationRef, waveIndex, unlockedTools, difficulty } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
+    audio.play('wave_cleared')
 
     const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
 
@@ -276,8 +316,13 @@ export const useGameStore = create((set, get) => ({
 
   pickUpgradeCard(card) {
     const { waveIndex, unlockedTools } = get()
-    if (card.type === 'unlock') set({ unlockedTools: [...unlockedTools, card.tool.id] })
-    else if (card.type === 'gold') set({ bank: get().bank + card.amount })
+    if (card.type === 'unlock') {
+      set({ unlockedTools: [...unlockedTools, card.tool.id] })
+      audio.play('upgrade_unlock')
+    } else if (card.type === 'gold') {
+      set({ bank: get().bank + card.amount })
+      audio.play('upgrade_gold')
+    }
 
     const nextWaveIndex = waveIndex + 1
     const isLastWave    = nextWaveIndex >= WAVE_CONFIGS.length
