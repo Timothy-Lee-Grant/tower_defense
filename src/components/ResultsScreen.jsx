@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { TREASURE_MAX_HP } from '../game/constants.js'
+import { selectResultsComment } from '../game/gerald.js'
 
 export default function ResultsScreen() {
   const waveIndex             = useGameStore(s => s.waveIndex)
@@ -18,19 +19,16 @@ export default function ResultsScreen() {
   const perfect   = heroesEscapedWithGold === 0
   const lostHoard = treasureHp <= 0
 
-  const geraldMemo = (() => {
-    if (lostHoard)
-      return '"The treasure room has been emptied. I have begun updating my résumé."'
-    if (perfect && heroesKilled > 0)
-      return '"Zero thieves escaped. The treasure is untouched. I\'ve filed this under \'Exceptional\'. Well done."'
-    if (heroesEscapedWithGold === 0)
-      return '"No gold was stolen. Some heroes did flee, but they left empty-handed. I consider this acceptable."'
-    if (heroesEscapedWithGold === 1)
-      return '"One thief escaped with gold. I\'ve opened an inquiry. This is a lapse in otherwise solid dungeon security."'
-    if (heroesEscapedWithGold > 2)
-      return `"${heroesEscapedWithGold} thieves escaped with our gold. I am not angry. I am disappointed. There is paperwork."`
-    return '"Some gold was taken. Reviewing trap placement for inefficiencies. Will report to the Dark Lord by Thursday."'
-  })()
+  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
+
+  const geraldMemo = selectResultsComment({
+    heroesKilled,
+    heroesEscapedWithGold,
+    goldStolenThisWave,
+    treasureHp,
+    treasureMaxHp,
+    waveIndex,
+  })
 
   const handlePick = (card) => {
     if (picked) return

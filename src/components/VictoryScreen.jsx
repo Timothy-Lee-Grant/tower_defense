@@ -1,10 +1,13 @@
 import React from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { WAVE_CONFIGS } from '../game/constants.js'
+import { selectVictoryComment } from '../game/gerald.js'
 
 export default function VictoryScreen() {
   const heroesKilled  = useGameStore(s => s.heroesKilled)
   const bank          = useGameStore(s => s.bank)
+  const treasureHp    = useGameStore(s => s.treasureHp)
+  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
   const goToMenu      = useGameStore(s => s.goToMenu)
 
   return (
@@ -29,9 +32,7 @@ export default function VictoryScreen() {
         <div style={s.memo}>
           <span style={s.memoFrom}>Final Memo from Gerald, Dungeon Operations</span>
           <p style={s.memoText}>
-            "The Champion has been defeated. The Archmage's orbs are extinguished. The Berserkers have
-            been composted. I have updated the dungeon's Wikipedia page to reflect a 14-wave win
-            streak. Treasure integrity: 100% secured. I am taking Friday off."
+            {selectVictoryComment({ treasureHp, treasureMaxHp })}
           </p>
         </div>
 

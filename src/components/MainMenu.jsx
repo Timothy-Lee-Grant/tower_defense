@@ -2,20 +2,13 @@ import React, { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { DIFFICULTIES } from '../game/constants.js'
 import { audio } from '../audio/audioEngine.js'
-
-const CONSULTANT_QUIPS = [
-  '"Your spike trap placement last session lacked synergy. I\'ve filed a report."',
-  '"The heroes returned. Again. I\'ve scheduled a performance review."',
-  '"Three knights defeated in room two. Recommend investing in ambush diversity."',
-  '"Your Wraith called in sick. I\'ve arranged temporary slime coverage."',
-  '"Q3 villain metrics are down. Have you considered more boulders?"',
-]
+import { MENU_QUIPS } from '../game/gerald.js'
 
 export default function MainMenu() {
   const startGame      = useGameStore(s => s.startGame)
   const setDifficulty  = useGameStore(s => s.setDifficulty)
   const difficulty     = useGameStore(s => s.difficulty)
-  const [quip] = useState(() => CONSULTANT_QUIPS[Math.floor(Math.random() * CONSULTANT_QUIPS.length)])
+  const [quip] = useState(() => MENU_QUIPS[Math.floor(Math.random() * MENU_QUIPS.length)])
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {

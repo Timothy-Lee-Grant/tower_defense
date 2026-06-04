@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useMemo } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
+import { selectWaveComment } from '../game/gerald.js'
 
 export default function BattleLog() {
   const phase     = useGameStore(s => s.phase)
@@ -17,19 +18,29 @@ export default function BattleLog() {
   const carryingGold = alive.filter(h => h.hasGold)
   const inbound     = alive.filter(h => !h.hasGold)
 
-  const gerald = (() => {
-    if (carryingGold.length > 0 && carryingGold.length === alive.length)
-      return '"Everyone is on the return trip. All traps to maximum alert. NOW."'
-    if (carryingGold.length > 0)
-      return `"${carryingGold.length} of them have the gold. I repeat: they have the gold."`
-    if (alive.length > 3)
-      return '"This is... more than expected. I\'ve escalated to the skeleton union rep."'
-    if (alive.length === 0 && escaped.length === 0)
-      return '"All targets neutralised. Outstanding. I\'ve booked a team celebration."'
-    if (alive.length === 0)
-      return '"Wave complete. Compiling incident reports on the ones who got away."'
-    return '"Satisfactory progress. Spike traps performing at median efficiency."'
-  })()
+  const treasureHp    = useGameStore(s => s.treasureHp)
+  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
+
+  // Derive Gerald's live comment from full game state — memoised to avoid
+  // recomputing every re-render when nothing strategically meaningful changed.
+  const gerald = useMemo(() => selectWaveComment({
+    treasureHp,
+    treasureMaxHp,
+    alive,
+    dead,
+    escaped,
+    carryingGold,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    treasureHp,
+    alive.length,
+    dead.length,
+    escaped.length,
+    carryingGold.length,
+    // also re-select when the set of live hero types changes (e.g. warlord appears)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    alive.map(h => h.type).sort().join(','),
+  ])
 
   return (
     <div style={s.root}>

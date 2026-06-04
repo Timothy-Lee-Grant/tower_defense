@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { WAVE_CONFIGS, HERO_TYPES } from '../game/constants.js'
+import { selectSynergyComment } from '../game/gerald.js'
 import DungeonGrid from './DungeonGrid.jsx'
 import ToolPalette from './ToolPalette.jsx'
 import BattleLog from './BattleLog.jsx'
@@ -43,7 +44,17 @@ export default function GameScreen() {
 
 function PlanHints() {
   const waveIndex  = useGameStore(s => s.waveIndex)
-  const nextWave = WAVE_CONFIGS[waveIndex]
+  const grid       = useGameStore(s => s.grid)
+  const nextWave   = WAVE_CONFIGS[waveIndex]
+  const nextHeroes = nextWave?.heroes ?? []
+
+  // Recompute Gerald's synergy observation whenever the grid or wave changes.
+  // selectSynergyComment is O(grid size) so memoisation is just cleanliness.
+  const synergy = useMemo(
+    () => selectSynergyComment(grid, nextHeroes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [grid, waveIndex]
+  )
 
   return (
     <div style={styles.hints}>
@@ -53,7 +64,7 @@ function PlanHints() {
           <p style={styles.hintsWaveName}>{nextWave.label}</p>
           <div style={styles.heroListIncoming}>
             {[...new Set(nextWave.heroes)].map(heroId => {
-              const hero = HERO_TYPES[heroId]
+              const hero  = HERO_TYPES[heroId]
               const count = nextWave.heroes.filter(h => h === heroId).length
               return (
                 <div key={heroId} style={styles.incomingHero}>
@@ -74,7 +85,6 @@ function PlanHints() {
         {[
           ['Left click', 'Place selected tool'],
           ['Right click', 'Sell tile (50% refund)'],
-          ['👁 Paths', 'Preview hero routes'],
           ['Select tool', 'Click tool then click grid'],
           ['During wave', 'Still place & sell tiles'],
           ['⚔ Send Them In', 'Begin the wave'],
@@ -85,6 +95,14 @@ function PlanHints() {
           </div>
         ))}
       </div>
+
+      {/* Gerald's synergy / threat assessment */}
+      {synergy && (
+        <div style={styles.geraldAssessment}>
+          <div style={styles.hintsHeader}>💀 GERALD'S ASSESSMENT</div>
+          <p style={styles.geraldNote}>{synergy}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -194,8 +212,16 @@ const styles = {
   geraldNote: {
     fontFamily: "'Crimson Text', serif",
     fontStyle: 'italic',
-    fontSize: '0.82rem',
+    fontSize: '0.78rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.5,
+    margin: 0,
+  },
+  geraldAssessment: {
+    marginTop: '1.2rem',
+    padding: '0.55rem 0.6rem',
+    background: 'rgba(232,196,74,0.04)',
+    border: '1px solid rgba(232,196,74,0.1)',
+    borderRadius: 5,
   },
 }

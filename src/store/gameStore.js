@@ -8,6 +8,7 @@ import {
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
+import { getHeroCallout } from '../game/gerald.js'
 
 // ── Grid factory ───────────────────────────────────────────────────────────
 function makeInitialGrid() {
@@ -162,6 +163,8 @@ export const useGameStore = create((set, get) => ({
     })
 
     let lastTime = performance.now()
+    // Track which hero types have appeared this wave so callouts fire only once
+    const seenHeroTypes = new Set()
 
     const loop = (now) => {
       const state = get()
@@ -236,6 +239,15 @@ export const useGameStore = create((set, get) => ({
           : `👁️ ${ev.label} cursed (stack ${ev.stacks}/3)`
         return null
       }).filter(Boolean)
+
+      // Gerald hero-type callouts — fires once per hero type per wave
+      result.heroes.forEach(h => {
+        if (h.spawned && !seenHeroTypes.has(h.type)) {
+          seenHeroTypes.add(h.type)
+          const callout = getHeroCallout(h.type)
+          if (callout) newLog.push(`💀 Gerald: ${callout}`)
+        }
+      })
 
       // Count state deltas
       const prevDead    = state.heroes.filter(h => h.state === 'dead').length
