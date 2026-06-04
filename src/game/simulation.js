@@ -36,6 +36,7 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
     color:          heroType.color,
     hp:             scaledHp,
     maxHp:          scaledHp,
+    baseMaxHp:      scaledHp,   // original max — used to visualise bat-drain desaturation
     speed:          heroType.speed,
     canDisarm:      heroType.canDisarm,
     heals:          heroType.heals,
@@ -321,7 +322,9 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         events.push({
           type: 'tower_attack', col: c, row: r,
           towerType: tileId,
-          heroId:   target.id,
+          heroId:    target.id,
+          damage:    dmg,                          // used by renderer for damage numbers
+          cursed:    (updatedHeroes[idx]?.curseStacks ?? 0) > 0,
           fromX: c * TILE_SIZE + TILE_SIZE / 2,
           fromY: r * TILE_SIZE + TILE_SIZE / 2,
           toX: target.x, toY: target.y,

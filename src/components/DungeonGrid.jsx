@@ -1,20 +1,18 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS } from '../game/constants.js'
+import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, TREASURE, ENTRANCE } from '../game/constants.js'
 import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
+import { ParticleSystem, PARTICLE_EFFECTS } from '../rendering/particles.js'
 
-// ── Tile base colors (bg fill + border drawn under every tile) ──
-// Sprite tiles get subtle floor-colored bases; the sprite draws its own art on top.
+// ── Tile base colors ────────────────────────────────────────────────────────
 const TILE_COLORS = {
   [TILE.EMPTY]:    { bg: '#16121a', border: '#1e1828' },
   [TILE.PATH]:     { bg: '#2a2218', border: '#3d3020' },
   [TILE.ENTRANCE]: { bg: '#0c0a10', border: '#4a3a60', label: '🚪', glow: '#2d1f40' },
   [TILE.TREASURE]: { bg: '#1a1000', border: '#c9a02a', label: '💰', glow: '#c9a02a' },
-  // On-path trap bases (path-coloured floor under the sprite)
   [TILE.SPIKE]:    { bg: '#221c12', border: '#38301e' },
   [TILE.BOULDER]:  { bg: '#1e1a12', border: '#32281a' },
   [TILE.DOOR]:     { bg: '#1a1208', border: '#2e2010' },
-  // Off-path tower bases (empty-floor under the sprite)
   [TILE.DART]:     { bg: '#18121e', border: '#241a2e' },
   [TILE.FIRE]:     { bg: '#1a0e06', border: '#281606' },
   [TILE.POISON]:   { bg: '#0e1608', border: '#181e0a' },
@@ -25,14 +23,45 @@ const TILE_COLORS = {
   [TILE.ICE]:      { bg: '#08101e', border: '#10182e' },
 }
 
+// Tower type → particle preset mapping
+const TOWER_PARTICLES = {
+  fire:     'ember',
+  poison:   'bubble',
+  ice:      'crystal',
+  dart:     'dart_impact',
+  skeleton: 'bone',
+  slime:    'slime',
+  wraith:   'wraith',
+  bat:      'drain',
+  troll:    'troll',
+  idol:     'curse_wisp',
+  shadow:   'shadow',
+  gargoyle: 'gargoyle',
+}
+
+// Floating number colors by source
+const DMG_COLOR = {
+  normal:  '#f0f0f0',
+  cursed:  '#ffaa20',
+  poison:  '#60dd30',
+  ice:     '#80ccff',
+  fire:    '#ff8030',
+  drain:   '#cc40ff',
+  treasure: '#ff4444',
+}
+
 export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const canvasRef = useRef(null)
 
+  // Store subscriptions
   const phase         = useGameStore(s => s.phase)
   const grid          = useGameStore(s => s.grid)
   const heroes        = useGameStore(s => s.heroes)
   const selectedTool  = useGameStore(s => s.selectedTool)
   const attackFlashes = useGameStore(s => s.attackFlashes)
+  const screenShake   = useGameStore(s => s.screenShake)
+  const treasureHp    = useGameStore(s => s.treasureHp)
+  const trapTimers    = useGameStore(s => s.trapTimers)
 
   const hoveredTile      = useRef(null)
   const animFrame        = useRef(null)
@@ -41,26 +70,164 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const heroesRef        = useRef(heroes)
   const gridRef          = useRef(grid)
   const attackFlashesRef = useRef(attackFlashes)
+  const trapTimersRef    = useRef(trapTimers)
   heroesRef.current        = heroes
   gridRef.current          = grid
   attackFlashesRef.current = attackFlashes
+  trapTimersRef.current    = trapTimers
+
+  // ── Juice state refs (mutated directly by effects, read in draw loop) ─────
+  const psRef              = useRef(new ParticleSystem())   // particle system
+  const shakeRef           = useRef({ x: 0, y: 0, intensity: 0, decay: 0.84 })
+  const tileAnimsRef       = useRef([])   // [{ col, row, startTime }]
+  const treasureFlashRef   = useRef({ active: false, startTime: 0 })
+  const heroEntryRef       = useRef(0)    // performance.now() of last spawn
+  const prevHeroesRef      = useRef([])
+  const prevGridRef        = useRef(null)
+  const prevTreasureHpRef  = useRef(treasureHp)
+  const lastFlashTimeRef   = useRef(0)
 
   const selectedToolDef = selectedTool
     ? DUNGEON_TOOLS.find(t => t.id === selectedTool)
     : null
 
+  // ── Screen shake ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (screenShake > 0) {
+      shakeRef.current.intensity = Math.max(shakeRef.current.intensity, screenShake)
+    }
+  }, [screenShake])
+
+  // ── Particles from attack flashes ─────────────────────────────────────────
+  useEffect(() => {
+    const ps = psRef.current
+    const newFlashes = attackFlashes.filter(f => f.t > lastFlashTimeRef.current)
+    newFlashes.forEach(flash => {
+      const preset = PARTICLE_EFFECTS[TOWER_PARTICLES[flash.towerType] ?? 'dart_impact']
+      if (preset) ps.emit(flash.toX, flash.toY, preset)
+
+      // Floating damage number
+      if (flash.damage != null && flash.damage > 0) {
+        let color = flash.cursed ? DMG_COLOR.cursed : DMG_COLOR.normal
+        if (flash.towerType === 'poison') color = DMG_COLOR.poison
+        if (flash.towerType === 'fire')   color = DMG_COLOR.fire
+        if (flash.towerType === 'ice')    color = DMG_COLOR.ice
+        if (flash.towerType === 'bat')    color = DMG_COLOR.drain
+        ps.emitText(flash.toX, flash.toY - 16, flash.damage, color)
+      }
+    })
+    if (newFlashes.length > 0) {
+      lastFlashTimeRef.current = Math.max(...newFlashes.map(f => f.t))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attackFlashes])
+
+  // ── Particles + death detection from hero state changes ───────────────────
+  useEffect(() => {
+    const ps       = psRef.current
+    const prev     = prevHeroesRef.current
+
+    // Newly dead → blood burst
+    heroes.forEach(h => {
+      const prevH = prev.find(p => p.id === h.id)
+      if (h.state === 'dead' && prevH && prevH.state !== 'dead') {
+        ps.emit(h.x, h.y, PARTICLE_EFFECTS.blood)
+      }
+    })
+
+    // Newly spawned → entry flash at their position
+    const newlySpawned = heroes.filter(h => {
+      const p = prev.find(p => p.id === h.id)
+      return h.spawned && (!p || !p.spawned)
+    })
+    if (newlySpawned.length > 0) {
+      heroEntryRef.current = performance.now()
+      ps.emit(
+        ENTRANCE.col * TILE_SIZE + TILE_SIZE / 2,
+        ENTRANCE.row * TILE_SIZE + TILE_SIZE / 2,
+        PARTICLE_EFFECTS.spawn_flash,
+      )
+    }
+
+    prevHeroesRef.current = heroes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroes])
+
+  // ── Particles from trap_triggered events (via grid + battle log) ──────────
+  // We wire trap particles via attackFlashes already captured above.
+  // For on-path trap triggers we'd need a separate event stream; handled below
+  // via a separate trapEventsRef mechanism fed from the store's battleLog length
+  // proxy. Instead, we detect boulder removal (grid cell reverts to PATH) here.
+  useEffect(() => {
+    const ps      = psRef.current
+    const prevG   = prevGridRef.current
+    if (!prevG) { prevGridRef.current = grid; return }
+
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c < grid[r].length; c++) {
+        const was = prevG[r][c]
+        const now = grid[r][c]
+
+        if (was === now) continue
+
+        // New tile placed (stamp animation + sparkle)
+        if (now !== TILE.EMPTY && now !== TILE.PATH &&
+            now !== TILE.ENTRANCE && now !== TILE.TREASURE) {
+          tileAnimsRef.current.push({ col: c, row: r, startTime: performance.now() })
+          ps.emit(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, PARTICLE_EFFECTS.placement)
+        }
+
+        // Boulder removed mid-wave (it was triggered)
+        if (was === TILE.BOULDER && now === TILE.PATH) {
+          ps.emit(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, PARTICLE_EFFECTS.rock)
+        }
+      }
+    }
+    prevGridRef.current = grid
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid])
+
+  // ── Treasure damage flash + particles ────────────────────────────────────
+  useEffect(() => {
+    if (treasureHp < prevTreasureHpRef.current) {
+      const tx = TREASURE.col * TILE_SIZE + TILE_SIZE / 2
+      const ty = TREASURE.row * TILE_SIZE + TILE_SIZE / 2
+      const damage = Math.round(prevTreasureHpRef.current - treasureHp)
+      psRef.current.emit(tx, ty, PARTICLE_EFFECTS.gold_sparkle)
+      psRef.current.emitText(tx, ty - 20, `-${damage}`, DMG_COLOR.treasure, 13)
+      treasureFlashRef.current = { active: true, startTime: performance.now() }
+    }
+    prevTreasureHpRef.current = treasureHp
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treasureHp])
+
+  // ── Main draw loop ────────────────────────────────────────────────────────
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     const t   = performance.now()
-    const now = t   // alias used by attack animation helpers
+    const now = t
 
     const currentGrid    = gridRef.current
     const currentHeroes  = heroesRef.current
     const currentFlashes = attackFlashesRef.current
+    const currentTimers  = trapTimersRef.current
+    const ps             = psRef.current
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // ── Screen shake ────────────────────────────────────────────────────────
+    const shake = shakeRef.current
+    let   shook = false
+    if (shake.intensity > 0.15) {
+      shake.x = (Math.random() - 0.5) * shake.intensity
+      shake.y = (Math.random() - 0.5) * shake.intensity
+      shake.intensity *= shake.decay
+      ctx.save()
+      ctx.translate(Math.round(shake.x), Math.round(shake.y))
+      shook = true
+    }
 
     // ── 1. Tile bases (bg + border) ──────────────────────────────────────────
     for (let row = 0; row < GRID_ROWS; row++) {
@@ -70,49 +237,38 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
 
-        ctx.fillStyle = colors.bg
-        ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
-
-        // Pulsing glow for entrance and treasure
-        if (colors.glow) {
-          const pulse = 0.7 + 0.3 * Math.sin(t / 600 + col * 0.7 + row * 0.3)
-          ctx.save()
-          ctx.globalAlpha = pulse * 0.4
-          ctx.fillStyle = colors.glow
-          ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4)
-          ctx.restore()
+        // Tile placement scale animation
+        const anim = tileAnimsRef.current.find(a => a.col === col && a.row === row)
+        if (anim) {
+          const elapsed = t - anim.startTime
+          if (elapsed > 220) {
+            // Done — remove it
+            tileAnimsRef.current = tileAnimsRef.current.filter(a => a !== anim)
+          } else {
+            // Stamp: 0 → 1.15 → 1.0 over 220ms
+            const p = elapsed / 220
+            const scale = p < 0.55
+              ? 0.3 + p / 0.55 * 0.85     // 0.3 → 1.15
+              : 1.15 - (p - 0.55) / 0.45 * 0.15  // 1.15 → 1.0
+            const cx = x + TILE_SIZE / 2
+            const cy = y + TILE_SIZE / 2
+            ctx.save()
+            ctx.translate(cx, cy)
+            ctx.scale(scale, scale)
+            ctx.translate(-cx, -cy)
+            _drawTileBase(ctx, x, y, tileId, colors, t)
+            ctx.restore()
+            continue
+          }
         }
 
-        // Subtle centre-strip shading on path tiles
-        if (tileId === TILE.PATH || tileId === TILE.SPIKE ||
-            tileId === TILE.BOULDER || tileId === TILE.DOOR) {
-          ctx.fillStyle = 'rgba(255,220,160,0.05)'
-          ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8)
-        }
-
-        // Border
-        ctx.strokeStyle = colors.border
-        ctx.lineWidth = 0.5
-        ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
-
-        // Entrance / treasure emoji labels (no sprite for these two)
-        if (colors.label) {
-          ctx.font = `bold ${TILE_SIZE * 0.5}px serif`
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillStyle = tileId === TILE.TREASURE ? '#e8c44a' : '#c8b8e8'
-          ctx.fillText(colors.label, x + TILE_SIZE / 2, y + TILE_SIZE / 2)
-        }
+        _drawTileBase(ctx, x, y, tileId, colors, t)
       }
     }
 
-    // ── 2. Tile sprites (traps / towers / monsters) ───────────────────────────
-    // Wraith tiles are skipped here and drawn separately (they roam outside
-    // their tile bounds and rush across the map during attacks).
-    // Wraith rush positions are computed from active attack flashes.
-
+    // ── 2. Tile sprites ──────────────────────────────────────────────────────
     const wraithFlashes = currentFlashes.filter(f => f.towerType === 'wraith' && now - f.t < ATTACK_DURATIONS.wraith)
-    const wraithRushMap = new Map()   // "tileCol,tileRow" → { x, y }
+    const wraithRushMap = new Map()
     for (const flash of wraithFlashes) {
       const pos = wraithRushPos(flash, now)
       if (pos) wraithRushMap.set(`${flash.tileCol},${flash.tileRow}`, pos)
@@ -123,7 +279,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         const tileId = currentGrid[row][col]
         const drawFn = TILE_SPRITES[tileId]
         if (!drawFn) continue
-        if (tileId === 'wraith') continue  // drawn in step 2b
+        if (tileId === 'wraith') continue
 
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
@@ -134,22 +290,58 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       }
     }
 
-    // ── 2b. Wraith sprites — drawn unclipped so they can roam + rush freely ──
+    // ── 2b. Wraith sprites ───────────────────────────────────────────────────
     for (let row = 0; row < GRID_ROWS; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
         if (currentGrid[row][col] !== 'wraith') continue
-        const x      = col * TILE_SIZE
-        const y      = row * TILE_SIZE
-        const rushP  = wraithRushMap.get(`${col},${row}`) ?? null
+        const x     = col * TILE_SIZE
+        const y     = row * TILE_SIZE
+        const rushP = wraithRushMap.get(`${col},${row}`) ?? null
         ctx.save()
         TILE_SPRITES.wraith(ctx, x, y, t, rushP)
         ctx.restore()
       }
     }
 
-    // ── 3. Range preview (hover with a tower selected) ────────────────────────
+    // ── 2c. Tower ready-to-fire glow ring ────────────────────────────────────
+    // Towers that have fully recharged their cooldown (timer ≥ attackSpeed)
+    // show a faint pulsing amber ring — "loaded and waiting."
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const tileId  = currentGrid[row][col]
+        const toolDef = DUNGEON_TOOLS.find(td => td.id === tileId && td.range)
+        if (!toolDef) continue
+        const key   = `tower_${col},${row}`
+        const timer = currentTimers[key] ?? toolDef.attackSpeed
+        if (timer >= toolDef.attackSpeed) {
+          const pulse = 0.25 + 0.15 * Math.sin(t * 0.008 + col + row)
+          const cx = col * TILE_SIZE + TILE_SIZE / 2
+          const cy = row * TILE_SIZE + TILE_SIZE / 2
+          ctx.strokeStyle = `rgba(255,210,60,${pulse})`
+          ctx.lineWidth   = 1.5
+          ctx.beginPath()
+          ctx.arc(cx, cy, TILE_SIZE * 0.44, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
+    }
+
+    // ── 2d. Hero entry effect — entrance gate pulse ───────────────────────────
+    const entranceElapsed = t - heroEntryRef.current
+    if (entranceElapsed < 500 && heroEntryRef.current > 0) {
+      const alpha = Math.max(0, 1 - entranceElapsed / 500)
+      const ex = ENTRANCE.col * TILE_SIZE
+      const ey = ENTRANCE.row * TILE_SIZE
+      ctx.save()
+      ctx.globalAlpha = alpha * 0.7
+      ctx.fillStyle   = '#c8a0ff'
+      ctx.fillRect(ex, ey, TILE_SIZE, TILE_SIZE)
+      ctx.restore()
+    }
+
+    // ── 3. Range preview ────────────────────────────────────────────────────
     if (
-      phase === PHASE.PLAN &&
+      (phase === PHASE.PLAN || phase === PHASE.WAVE) &&
       selectedToolDef?.placesOn === 'open' &&
       selectedToolDef?.range &&
       hoveredTile.current
@@ -165,9 +357,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
           }
         }
       }
-      // Range ring outline around hovered tile
       ctx.strokeStyle = 'rgba(232,196,74,0.5)'
-      ctx.lineWidth = 1
+      ctx.lineWidth   = 1
       ctx.setLineDash([4, 3])
       ctx.beginPath()
       ctx.arc(
@@ -180,52 +371,121 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.setLineDash([])
     }
 
-    // ── 4. Hover highlight ────────────────────────────────────────────────────
-    if (hoveredTile.current && phase === PHASE.PLAN) {
+    // ── 4. Hover highlight ───────────────────────────────────────────────────
+    if (hoveredTile.current && (phase === PHASE.PLAN || phase === PHASE.WAVE)) {
       const { col, row } = hoveredTile.current
       const x = col * TILE_SIZE
       const y = row * TILE_SIZE
-      ctx.fillStyle = selectedTool ? 'rgba(232,196,74,0.18)' : 'rgba(200,200,200,0.07)'
+      ctx.fillStyle   = selectedTool ? 'rgba(232,196,74,0.18)' : 'rgba(200,200,200,0.07)'
       ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
       ctx.strokeStyle = selectedTool ? 'rgba(232,196,74,0.75)' : 'rgba(200,200,200,0.3)'
-      ctx.lineWidth = 1.5
+      ctx.lineWidth   = 1.5
       ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
     }
 
-    // ── 5. Attack animations (projectiles, sword arcs, etc.) ──────────────────
+    // ── 5. Attack animations ─────────────────────────────────────────────────
     for (const flash of currentFlashes) {
       drawAttackEffect(ctx, flash, now)
     }
 
-    // ── 6. Hero sprites ───────────────────────────────────────────────────────
+    // ── 6. Hero sprites ──────────────────────────────────────────────────────
     for (const hero of currentHeroes) {
-      if (!hero.spawned || hero.state === 'dead') continue
+      if (!hero.spawned) continue
 
-      const { x, y, hp, maxHp } = hero
+      // ── Death animation ──────────────────────────────────────────────────
+      if (hero.state === 'dead') {
+        if (!hero.deathStartTime) continue
+        const elapsed = t - hero.deathStartTime
+        if (elapsed > 850) continue
+
+        const progress = Math.min(1, elapsed / 850)
+        // Fade starts at 15% of animation, fully gone by 100%
+        const alpha    = Math.max(0, 1 - Math.max(0, progress - 0.15) / 0.85)
+        const rotation = progress * Math.PI * 0.65
+        const fallY    = progress * progress * 28
+
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.translate(Math.round(hero.x), Math.round(hero.y + fallY))
+        ctx.rotate(rotation)
+
+        // White impact flash on first 80ms
+        if (elapsed < 80) {
+          const flashAlpha = (80 - elapsed) / 80 * 0.75
+          ctx.save()
+          ctx.globalAlpha = flashAlpha
+          ctx.fillStyle   = '#ffffff'
+          ctx.fillRect(-22, -34, 44, 52)
+          ctx.restore()
+        }
+
+        const drawHero = HERO_SPRITES[hero.type]
+        if (drawHero) drawHero(ctx, 0, 0, t, hero)
+        ctx.restore()
+        continue
+      }
+
+      // ── Living heroes ────────────────────────────────────────────────────
+      const { x, y, hp, maxHp, baseMaxHp } = hero
       const drawHero = HERO_SPRITES[hero.type]
 
       ctx.save()
-      if (hero.state === 'escaped') ctx.globalAlpha = 0.35
+      if (hero.state === 'escaped') ctx.globalAlpha = 0.3
 
-      // Ice slow — faint blue aura ring
-      if (hero.slowed) {
-        const iceAlpha = 0.3 + 0.2 * Math.sin(t * 0.015)
-        ctx.strokeStyle = `rgba(100,180,255,${iceAlpha})`
-        ctx.lineWidth = 2.5
-        ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.stroke()
-      }
-
-      if (drawHero) {
-        drawHero(ctx, x, y, t, hero)
+      // Bat drain desaturation — gray overlay proportional to maxHp drained
+      if (baseMaxHp && hero.maxHp < baseMaxHp * 0.88) {
+        // draw hero first, then overlay desaturation
+        if (drawHero) drawHero(ctx, x, y, t, hero)
+        const drainRatio = 1 - hero.maxHp / baseMaxHp
+        ctx.fillStyle = `rgba(80,80,90,${drainRatio * 0.45})`
+        ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.fill()
       } else {
-        // Fallback circle if sprite missing
-        ctx.fillStyle = hero.color
-        ctx.beginPath()
-        ctx.arc(x, y, 14, 0, Math.PI * 2)
-        ctx.fill()
+        if (drawHero) {
+          drawHero(ctx, x, y, t, hero)
+        } else {
+          ctx.fillStyle = hero.color
+          ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.fill()
+        }
       }
 
       ctx.restore()
+
+      // ── Status rings (drawn outside save/restore so they layer correctly) ──
+
+      // Ice slow — crystalline dashed ring
+      if (hero.slowed) {
+        const iceAlpha = 0.35 + 0.18 * Math.sin(t * 0.015)
+        ctx.strokeStyle = `rgba(100,200,255,${iceAlpha})`
+        ctx.lineWidth   = 2
+        ctx.setLineDash([3, 2])
+        ctx.beginPath(); ctx.arc(x, y, 19, 0, Math.PI * 2); ctx.stroke()
+        ctx.setLineDash([])
+      }
+
+      // Curse stacks — rotating hexagonal rune above head
+      if (hero.curseStacks > 0) {
+        const runeAngle = t * 0.0025 * (0.8 + hero.curseStacks * 0.4)
+        const runeR     = 5 + hero.curseStacks * 1.5
+        const runeAlpha = 0.65 + 0.2 * Math.sin(t * 0.006)
+        ctx.save()
+        ctx.translate(Math.round(x), Math.round(y - 30))
+        ctx.rotate(runeAngle)
+        ctx.strokeStyle = `rgba(160,20,240,${runeAlpha})`
+        ctx.lineWidth   = 1.5
+        ctx.beginPath()
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2
+          i === 0
+            ? ctx.moveTo(runeR * Math.cos(a), runeR * Math.sin(a))
+            : ctx.lineTo(runeR * Math.cos(a), runeR * Math.sin(a))
+        }
+        ctx.closePath()
+        ctx.stroke()
+        // Inner dot
+        ctx.fillStyle = `rgba(200,80,255,${runeAlpha * 0.6})`
+        ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill()
+        ctx.restore()
+      }
 
       // HP bar
       const barW  = 30, barH = 4
@@ -237,21 +497,49 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.fillStyle = ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'
       ctx.fillRect(barX, barY, barW * ratio, barH)
       ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-      ctx.lineWidth = 0.5
+      ctx.lineWidth   = 0.5
       ctx.strokeRect(barX, barY, barW, barH)
 
-      // Gold-carrying indicator — pulsing coin above the HP bar
+      // Gold-carrying indicator
       if (hero.hasGold) {
         const pulse = 0.7 + 0.3 * Math.sin(t * 0.008 + hero.pathIndex)
         ctx.save()
         ctx.globalAlpha = pulse
-        ctx.font = '11px serif'
-        ctx.textAlign = 'center'
+        ctx.font        = '11px serif'
+        ctx.textAlign   = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText('💰', x, barY - 8)
         ctx.restore()
       }
     }
+
+    // ── 7. Treasure damage flash ──────────────────────────────────────────────
+    const flash = treasureFlashRef.current
+    if (flash.active) {
+      const elapsed = t - flash.startTime
+      if (elapsed > 500) {
+        flash.active = false
+      } else {
+        const alpha = Math.max(0, 1 - elapsed / 500) * 0.55
+        const tx    = TREASURE.col * TILE_SIZE
+        const ty    = TREASURE.row * TILE_SIZE
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.fillStyle   = '#ff2020'
+        ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE)
+        ctx.restore()
+      }
+    }
+
+    // ── 8. Particles (and floating numbers) ──────────────────────────────────
+    // Update uses the frame delta; approximate it from a fixed 16ms since we
+    // don't track lastTime here (draw loop is display-locked, good enough).
+    const frameDelta = 16
+    ps.update(frameDelta)
+    ps.draw(ctx)
+
+    // ── End screen shake ──────────────────────────────────────────────────────
+    if (shook) ctx.restore()
 
     animFrame.current = requestAnimationFrame(draw)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -275,10 +563,10 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const inBounds = ({ col, row }) =>
     col >= 0 && col < GRID_COLS && row >= 0 && row < GRID_ROWS
 
-  const handleMouseMove  = (e) => { const p = getTile(e); hoveredTile.current = inBounds(p) ? p : null }
-  const handleMouseLeave = ()  => { hoveredTile.current = null }
+  const handleMouseMove   = (e) => { const p = getTile(e); hoveredTile.current = inBounds(p) ? p : null }
+  const handleMouseLeave  = ()  => { hoveredTile.current = null }
   const canEdit = phase === PHASE.PLAN || phase === PHASE.WAVE
-  const handleClick      = (e) => { if (!canEdit) return; const p = getTile(e); if (inBounds(p)) onTileClick(p.col, p.row) }
+  const handleClick       = (e) => { if (!canEdit) return; const p = getTile(e); if (inBounds(p)) onTileClick(p.col, p.row) }
   const handleContextMenu = (e) => {
     e.preventDefault()
     if (!canEdit) return
@@ -293,7 +581,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       height={GRID_ROWS * TILE_SIZE}
       style={{
         display: 'block',
-        width: '100%',
+        width:  '100%',
         height: '100%',
         cursor: canEdit ? (selectedTool ? 'crosshair' : 'default') : 'default',
       }}
@@ -303,4 +591,41 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       onContextMenu={handleContextMenu}
     />
   )
+}
+
+// ── Internal helper — draw a single tile's background ────────────────────────
+function _drawTileBase(ctx, x, y, tileId, colors, t) {
+  ctx.fillStyle = colors.bg
+  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
+
+  // Pulsing glow for entrance and treasure
+  if (colors.glow) {
+    const pulse = 0.7 + 0.3 * Math.sin(t / 600 + x * 0.007 + y * 0.003)
+    ctx.save()
+    ctx.globalAlpha = pulse * 0.4
+    ctx.fillStyle   = colors.glow
+    ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4)
+    ctx.restore()
+  }
+
+  // Subtle centre-strip shading on path tiles
+  if (tileId === TILE.PATH || tileId === TILE.SPIKE ||
+      tileId === TILE.BOULDER || tileId === TILE.DOOR) {
+    ctx.fillStyle = 'rgba(255,220,160,0.05)'
+    ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8)
+  }
+
+  // Border
+  ctx.strokeStyle = colors.border
+  ctx.lineWidth   = 0.5
+  ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
+
+  // Entrance / treasure emoji labels
+  if (colors.label) {
+    ctx.font         = `bold ${TILE_SIZE * 0.5}px serif`
+    ctx.textAlign    = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle    = tileId === TILE.TREASURE ? '#e8c44a' : '#c8b8e8'
+    ctx.fillText(colors.label, x + TILE_SIZE / 2, y + TILE_SIZE / 2)
+  }
 }

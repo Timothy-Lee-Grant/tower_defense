@@ -52,6 +52,7 @@ export const useGameStore = create((set, get) => ({
   battleLog:      [],
   attackFlashes:  [],
   upgradeCards:   [],
+  screenShake:    0,   // current shake intensity; consumed + decayed by DungeonGrid
 
   currentWaveConfig: () => WAVE_CONFIGS[get().waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1],
 
@@ -84,6 +85,12 @@ export const useGameStore = create((set, get) => ({
   },
 
   goToMenu() { set({ phase: PHASE.MENU }) },
+
+  triggerScreenShake(intensity) {
+    set({ screenShake: intensity })
+    // Reset one frame later so next shake of same intensity still fires subscription
+    setTimeout(() => set({ screenShake: 0 }), 16)
+  },
   selectTool(id)  { set({ selectedTool: id }) },
   selectCategory(cat) { set({ selectedCategory: cat, selectedTool: null }) },
 
@@ -165,11 +172,16 @@ export const useGameStore = create((set, get) => ({
 
       const result = simulationTick(state.heroes, state.grid, deltaMs, state.trapTimers)
 
-      // ── Audio events ───────────────────────────────────────────────────────
+      // ── Audio + screen shake events ────────────────────────────────────────
       result.events.forEach(ev => {
         switch (ev.type) {
           case 'trap_triggered':
-            audio.play(ev.trap === 'boulder' ? 'boulder_crush' : 'spike_trigger')
+            if (ev.trap === 'boulder') {
+              audio.play('boulder_crush')
+              get().triggerScreenShake(4)
+            } else {
+              audio.play('spike_trigger')
+            }
             break
           case 'trap_disarmed':
             audio.play('trap_disarmed')
@@ -184,10 +196,14 @@ export const useGameStore = create((set, get) => ({
             audio.play('gold_pickup')
             break
           case 'hero_escaped':
-            if (ev.hadGold) audio.play('hero_escaped_gold')
+            if (ev.hadGold) {
+              audio.play('hero_escaped_gold')
+              get().triggerScreenShake(10)
+            }
             break
           case 'tower_attack':
             audio.play(ev.towerType + '_fire')
+            if (ev.towerType === 'troll') get().triggerScreenShake(5)
             break
           case 'curse_applied':
             audio.play('curse_applied')
@@ -196,8 +212,11 @@ export const useGameStore = create((set, get) => ({
         }
       })
 
-      // When treasure takes damage, play the ominous warning
-      if (result.treasureDamage > 0) audio.play('treasure_damaged')
+      // Treasure damage — ominous warning + strong shake
+      if (result.treasureDamage > 0) {
+        audio.play('treasure_damaged')
+        get().triggerScreenShake(8)
+      }
 
       // Build battle log entries
       const newLog = result.events.map(ev => {
@@ -228,8 +247,17 @@ export const useGameStore = create((set, get) => ({
 
       const newTreasureHp = Math.max(0, state.treasureHp - result.treasureDamage)
 
-      // Attack flash events
+      // Enrich newly-dead heroes with deathStartTime so DungeonGrid can animate them
       const ts = performance.now()
+      const enrichedHeroes = result.heroes.map(h => {
+        if (h.state === 'dead') {
+          const prev = state.heroes.find(p => p.id === h.id)
+          if (prev && prev.state !== 'dead') return { ...h, deathStartTime: ts }
+        }
+        return h
+      })
+
+      // Attack flash events — include damage + cursed flag for floating numbers / tint
       const freshFlashes = result.events
         .filter(e => e.type === 'tower_attack')
         .map(e => ({
@@ -237,6 +265,8 @@ export const useGameStore = create((set, get) => ({
           toX: e.toX, toY: e.toY,
           towerType: e.towerType,
           tileCol: e.col, tileRow: e.row,
+          damage: e.damage,
+          cursed:  e.cursed,
           t: ts,
         }))
       // Keep flashes alive long enough for the longest animation (wraith rush ~700ms)
@@ -246,7 +276,7 @@ export const useGameStore = create((set, get) => ({
       ]
 
       set({
-        heroes:          result.heroes,
+        heroes:          enrichedHeroes,
         trapTimers:      result.trapTimers,
         treasureHp:      newTreasureHp,
         heroesKilled:    state.heroesKilled    + (newDead    - prevDead),
