@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { WAVE_CONFIGS, HERO_TYPES } from '../game/constants.js'
+import { WAVE_CONFIGS, HERO_TYPES, DUNGEON_TOOLS, UPGRADE_TIERS, getEffectiveTool } from '../game/constants.js'
 import { selectSynergyComment } from '../game/gerald.js'
 import { estimateSurvival, getImmunityWarnings, HERO_PATH_COLORS } from '../game/analysis.js'
 import { encodeLayout } from '../game/persistence.js'
@@ -14,9 +14,39 @@ export default function GameScreen() {
   const placeTile      = useGameStore(s => s.placeTile)
   const bankPlaceTile  = useGameStore(s => s.bankPlaceTile)
   const removeTile     = useGameStore(s => s.removeTile)
+  const upgradeTile    = useGameStore(s => s.upgradeTile)
+  const tileUpgrades   = useGameStore(s => s.tileUpgrades)
+  const grid           = useGameStore(s => s.grid)
+
+  // Upgrade panel state — { col, row } or null
+  const [upgradeTarget, setUpgradeTarget] = useState(null)
 
   // During a wave, tile clicks spend from the war chest at 1.5× cost.
   const handleTileClick = phase === PHASE.WAVE ? bankPlaceTile : placeTile
+
+  // Right-click: open upgrade panel for placed tools, else remove
+  const handleRightClick = useCallback((col, row) => {
+    const tileId = grid[row]?.[col]
+    const isPlacedTool = tileId && DUNGEON_TOOLS.some(t => t.id === tileId)
+    if (isPlacedTool) {
+      setUpgradeTarget(prev =>
+        prev?.col === col && prev?.row === row ? null : { col, row }
+      )
+    } else {
+      removeTile(col, row)
+    }
+  }, [grid, removeTile])
+
+  const handleUpgrade = useCallback(() => {
+    if (!upgradeTarget) return
+    upgradeTile(upgradeTarget.col, upgradeTarget.row)
+  }, [upgradeTarget, upgradeTile])
+
+  const handleSell = useCallback(() => {
+    if (!upgradeTarget) return
+    removeTile(upgradeTarget.col, upgradeTarget.row)
+    setUpgradeTarget(null)
+  }, [upgradeTarget, removeTile])
 
   return (
     <div style={styles.root}>
@@ -34,8 +64,20 @@ export default function GameScreen() {
         <div style={styles.gridWrapper}>
           <DungeonGrid
             onTileClick={handleTileClick}
-            onTileRightClick={removeTile}
+            onTileRightClick={handleRightClick}
           />
+          {/* Upgrade panel overlaid on grid */}
+          {upgradeTarget && (
+            <UpgradePanel
+              col={upgradeTarget.col}
+              row={upgradeTarget.row}
+              tileId={grid[upgradeTarget.row]?.[upgradeTarget.col]}
+              currentTier={tileUpgrades[`${upgradeTarget.col},${upgradeTarget.row}`] ?? 0}
+              onUpgrade={handleUpgrade}
+              onSell={handleSell}
+              onClose={() => setUpgradeTarget(null)}
+            />
+          )}
         </div>
 
         {/* Right sidebar: incoming threat (plan) or live battle log (wave) */}
@@ -46,6 +88,158 @@ export default function GameScreen() {
       </div>
     </div>
   )
+}
+
+// ── Upgrade Panel ────────────────────────────────────────────────────────────
+const TIER_LABELS = ['Base', 'Tier 2', 'Tier 3']
+const TIER_COLORS = ['#888', '#60aaff', '#ffaa20']
+
+function UpgradePanel({ col, row, tileId, currentTier, onUpgrade, onSell, onClose }) {
+  const bank = useGameStore(s => s.bank)
+
+  const baseDef   = DUNGEON_TOOLS.find(t => t.id === tileId)
+  if (!baseDef) return null
+
+  const tierDefs  = UPGRADE_TIERS[tileId] ?? []
+  const currTier  = getEffectiveTool(tileId, currentTier) ?? baseDef
+  const nextTier  = currentTier < 2 ? (tierDefs[currentTier] ?? null) : null
+  const canAfford = nextTier && bank >= nextTier.cost
+
+  const statRows = []
+  if (currTier.damage)      statRows.push({ label: 'Damage',      val: currTier.damage,      next: nextTier?.stats?.damage })
+  if (currTier.range)       statRows.push({ label: 'Range',       val: currTier.range,       next: nextTier?.stats?.range })
+  if (currTier.attackSpeed) statRows.push({ label: 'Speed (ms)',  val: currTier.attackSpeed, next: nextTier?.stats?.attackSpeed })
+  if (currTier.dotDamage)   statRows.push({ label: 'DoT HP/s',    val: currTier.dotDamage,   next: nextTier?.stats?.dotDamage })
+
+  return (
+    <div style={upgradeStyles.overlay} onMouseDown={e => e.stopPropagation()}>
+      <div style={upgradeStyles.panel}>
+        {/* Header */}
+        <div style={upgradeStyles.header}>
+          <span style={{ fontSize: 20 }}>{baseDef.emoji}</span>
+          <span style={upgradeStyles.tileLabel}>{baseDef.label}</span>
+          <span style={{ ...upgradeStyles.tierBadge, color: TIER_COLORS[currentTier] }}>
+            {TIER_LABELS[currentTier]}
+          </span>
+          <button style={upgradeStyles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        {/* Current description */}
+        <p style={upgradeStyles.desc}>{baseDef.description}</p>
+
+        {/* Stat comparison */}
+        {statRows.length > 0 && (
+          <div style={upgradeStyles.stats}>
+            {statRows.map(s => (
+              <div key={s.label} style={upgradeStyles.statRow}>
+                <span style={upgradeStyles.statLabel}>{s.label}</span>
+                <span style={upgradeStyles.statVal}>{s.val}</span>
+                {s.next !== undefined && s.next !== s.val && (
+                  <span style={upgradeStyles.statNext}> → {s.next}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Next tier info */}
+        {nextTier ? (
+          <div style={upgradeStyles.nextTier}>
+            <div style={upgradeStyles.nextTierHeader}>
+              <span style={{ color: TIER_COLORS[currentTier + 1] }}>
+                ▲ {TIER_LABELS[currentTier + 1]}: {nextTier.label}
+              </span>
+              <span style={{ color: canAfford ? '#c8a048' : '#884a2a' }}>
+                {nextTier.cost}g bank
+              </span>
+            </div>
+            <p style={upgradeStyles.nextTierDesc}>{nextTier.desc}</p>
+            <button
+              style={{ ...upgradeStyles.upgradeBtn, opacity: canAfford ? 1 : 0.45 }}
+              disabled={!canAfford}
+              onClick={onUpgrade}
+            >
+              {canAfford ? `Upgrade (${nextTier.cost}g)` : `Need ${nextTier.cost - bank}g more`}
+            </button>
+          </div>
+        ) : (
+          <div style={upgradeStyles.maxTier}>✦ Fully upgraded</div>
+        )}
+
+        {/* Sell */}
+        <div style={upgradeStyles.sellRow}>
+          <span style={upgradeStyles.sellNote}>Sell refunds base cost only</span>
+          <button style={upgradeStyles.sellBtn} onClick={onSell}>
+            Sell (+{Math.floor((baseDef.cost ?? 0) * 0.5)}g)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const upgradeStyles = {
+  overlay: {
+    position: 'absolute', inset: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    pointerEvents: 'none',
+    zIndex: 50,
+  },
+  panel: {
+    pointerEvents: 'all',
+    background: 'rgba(14,10,20,0.97)',
+    border: '1px solid rgba(200,160,72,0.4)',
+    borderRadius: 8,
+    padding: '14px 16px',
+    minWidth: 240, maxWidth: 280,
+    color: '#d8d0c8',
+    fontSize: 13,
+    boxShadow: '0 4px 24px rgba(0,0,0,0.8)',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    marginBottom: 6,
+  },
+  tileLabel: { fontWeight: 700, fontSize: 15, flex: 1 },
+  tierBadge: { fontSize: 12, fontWeight: 600 },
+  closeBtn: {
+    background: 'none', border: 'none', color: '#888',
+    cursor: 'pointer', fontSize: 14, padding: '0 2px',
+    marginLeft: 'auto',
+  },
+  desc: { margin: '0 0 10px', color: '#a09080', fontSize: 12, lineHeight: 1.4 },
+  stats: { display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 },
+  statRow: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 },
+  statLabel: { color: '#887870', minWidth: 70 },
+  statVal:   { color: '#d8d0c8' },
+  statNext:  { color: '#60aaff', fontWeight: 600 },
+  nextTier: {
+    background: 'rgba(32,24,12,0.8)',
+    border: '1px solid rgba(200,160,72,0.2)',
+    borderRadius: 5, padding: '8px 10px', marginBottom: 10,
+  },
+  nextTierHeader: {
+    display: 'flex', justifyContent: 'space-between',
+    fontSize: 13, fontWeight: 600, marginBottom: 4,
+  },
+  nextTierDesc: { margin: '0 0 8px', color: '#a09080', fontSize: 12, lineHeight: 1.4 },
+  upgradeBtn: {
+    width: '100%', padding: '6px 0',
+    background: 'rgba(200,160,72,0.15)',
+    border: '1px solid rgba(200,160,72,0.4)',
+    borderRadius: 4, color: '#c8a048',
+    cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  },
+  maxTier: { color: '#60aaff', textAlign: 'center', padding: '6px 0', marginBottom: 8, fontSize: 13 },
+  sellRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  sellNote: { color: '#666', fontSize: 11 },
+  sellBtn: {
+    padding: '4px 10px',
+    background: 'rgba(139,26,26,0.2)',
+    border: '1px solid rgba(139,26,26,0.4)',
+    borderRadius: 4, color: '#c04040',
+    cursor: 'pointer', fontSize: 12,
+  },
 }
 
 function PlanHints() {

@@ -46,6 +46,7 @@ export function buildSaveData(state) {
     grid:          state.grid,
     gold:          state.gold,
     bank:          state.bank,
+    tileUpgrades:  state.tileUpgrades ?? {},
     unlockedTools: state.unlockedTools,
     treasureHp:    state.treasureHp,         // end-of-last-wave HP (display only)
     treasureMaxHp: state.treasureMaxHp,

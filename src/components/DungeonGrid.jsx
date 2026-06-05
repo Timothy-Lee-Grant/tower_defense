@@ -73,6 +73,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const screenShake      = useGameStore(s => s.screenShake)
   const treasureHp       = useGameStore(s => s.treasureHp)
   const trapTimers       = useGameStore(s => s.trapTimers)
+  const tileUpgrades     = useGameStore(s => s.tileUpgrades)
   const showPathPreview  = useGameStore(s => s.showPathPreview)
   const showCoverageMap  = useGameStore(s => s.showCoverageMap)
   const waveIndex        = useGameStore(s => s.waveIndex)
@@ -83,12 +84,14 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   // Refs for rapidly-changing wave state — avoids restarting the draw loop
   const heroesRef        = useRef(heroes)
   const gridRef          = useRef(grid)
-  const attackFlashesRef = useRef(attackFlashes)
-  const trapTimersRef    = useRef(trapTimers)
+  const attackFlashesRef  = useRef(attackFlashes)
+  const trapTimersRef     = useRef(trapTimers)
+  const tileUpgradesRef   = useRef(tileUpgrades)
   heroesRef.current        = heroes
   gridRef.current          = grid
   attackFlashesRef.current = attackFlashes
   trapTimersRef.current    = trapTimers
+  tileUpgradesRef.current  = tileUpgrades
 
   // ── Juice state refs (mutated directly by effects, read in draw loop) ─────
   const psRef              = useRef(new ParticleSystem())   // particle system
@@ -343,6 +346,36 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         TILE_SPRITES.wraith(ctx, x, y, t, rushP)
         ctx.restore()
       }
+    }
+
+    // ── 2b.5 Upgrade tier badges ─────────────────────────────────────────────
+    const currentUpgrades = tileUpgradesRef.current
+    for (const [key, tier] of Object.entries(currentUpgrades)) {
+      if (tier <= 0) continue
+      const [col, row] = key.split(',').map(Number)
+      const x = col * TILE_SIZE
+      const y = row * TILE_SIZE
+      // Badge in top-right corner
+      const bx = x + TILE_SIZE - 11
+      const by = y + 3
+      ctx.save()
+      ctx.font = 'bold 10px monospace'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      if (tier === 2) {
+        // Tier 3 — gold crown
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'
+        ctx.beginPath(); ctx.arc(bx, by + 5, 7, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = '#ffaa20'
+        ctx.fillText('♛', bx, by)
+      } else {
+        // Tier 2 — blue gem
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'
+        ctx.beginPath(); ctx.arc(bx, by + 5, 7, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = '#60aaff'
+        ctx.fillText('◆', bx, by)
+      }
+      ctx.restore()
     }
 
     // ── 2c. Coverage heatmap overlay ─────────────────────────────────────────

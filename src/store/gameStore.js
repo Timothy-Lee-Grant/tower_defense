@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
   SELL_REFUND_RATE, BANK_COST_MULT, WAVE_CONFIGS,
-  HERO_TYPES, DIFFICULTIES,
+  HERO_TYPES, DIFFICULTIES, UPGRADE_TIERS,
   PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
@@ -41,6 +41,7 @@ export const useGameStore = create((set, get) => ({
   waveIndex:      0,
   heroes:         [],
   trapTimers:     {},
+  tileUpgrades:   {},   // "col,row" → tier (1 or 2)
   simulationRef:  null,
 
   // Wave stats — treasureMaxHp tracks the difficulty-specific ceiling for the HP bar ratio
@@ -82,6 +83,7 @@ export const useGameStore = create((set, get) => ({
       gold:  diff.startingGold,
       bank:  0,
       waveIndex: 0,
+      tileUpgrades: {},
       treasureMaxHp: diff.treasureHp,
       treasureHp:    diff.treasureHp,
       heroesKilled: 0,
@@ -126,6 +128,7 @@ export const useGameStore = create((set, get) => ({
       grid:          saveData.grid,
       gold:          saveData.gold,
       bank:          saveData.bank,
+      tileUpgrades:  saveData.tileUpgrades ?? {},
       unlockedTools: saveData.unlockedTools,
       treasureHp:    saveData.treasureHp,
       treasureMaxHp: saveData.treasureMaxHp,
@@ -201,17 +204,45 @@ export const useGameStore = create((set, get) => ({
   },
 
   removeTile(col, row) {
-    const { grid, gold } = get()
+    const { grid, gold, tileUpgrades } = get()
     const tileId = grid[row]?.[col]
     if (!tileId || tileId === TILE.EMPTY || tileId === TILE.PATH ||
         tileId === TILE.ENTRANCE || tileId === TILE.TREASURE) return
 
     const def    = DUNGEON_TOOLS.find(t => t.id === tileId)
+    // Sell refund: base cost × 50% only — upgrades are not refunded
     const refund = def ? Math.floor(def.cost * SELL_REFUND_RATE) : 0
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = PATH_CENTER_SET.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
-    set({ grid: newGrid, gold: gold + refund })
+    const newUpgrades = { ...tileUpgrades }
+    delete newUpgrades[`${col},${row}`]
+    set({ grid: newGrid, gold: gold + refund, tileUpgrades: newUpgrades })
     audio.play('tile_removed')
+  },
+
+  upgradeTile(col, row) {
+    const { grid, bank, tileUpgrades } = get()
+    const tileId = grid[row]?.[col]
+    if (!tileId) return
+
+    const key         = `${col},${row}`
+    const currentTier = tileUpgrades[key] ?? 0
+    if (currentTier >= 2) return   // already at max tier
+
+    const tiers = UPGRADE_TIERS[tileId]
+    if (!tiers) return   // tile is not upgradeable
+
+    const nextTier = currentTier + 1
+    const tierDef  = tiers[nextTier - 1]   // tiers[0] = T2, tiers[1] = T3
+    if (!tierDef) return
+
+    if (bank < tierDef.cost) return   // not enough bank gold
+
+    set({
+      bank:         bank - tierDef.cost,
+      tileUpgrades: { ...tileUpgrades, [key]: nextTier },
+    })
+    audio.play('upgrade_unlock')
   },
 
   startWave() {
@@ -257,7 +288,7 @@ export const useGameStore = create((set, get) => ({
       const deltaMs = Math.min(now - lastTime, 100) // cap delta to avoid huge jumps
       lastTime = now
 
-      const result = simulationTick(state.heroes, state.grid, deltaMs, state.trapTimers)
+      const result = simulationTick(state.heroes, state.grid, deltaMs, state.trapTimers, state.tileUpgrades)
 
       // ── Audio + screen shake events ────────────────────────────────────────
       result.events.forEach(ev => {
@@ -327,6 +358,9 @@ export const useGameStore = create((set, get) => ({
         if (ev.type === 'curse_applied')    return ev.stacks === 3
           ? `👁️ ${ev.label} fully cursed — all damage +45%!`
           : `👁️ ${ev.label} cursed (stack ${ev.stacks}/3)`
+        if (ev.type === 'engineer_disable') return `🔧 Engineer disabled tower at (${ev.col},${ev.row})!`
+        if (ev.type === 'medic_revive_queued') return `➕ Medic queuing revival for ${ev.label}…`
+        if (ev.type === 'medic_revived')    return `➕ ${ev.label} revived at 40% HP by the Medic!`
         return null
       }).filter(Boolean)
 
@@ -393,12 +427,25 @@ export const useGameStore = create((set, get) => ({
       })
 
       // Handle boulder self-destruction (one-shot trap)
+      // Iron Crusher (T3 boulder) has boulderRespawn — don't remove those
       const boulderEvents = result.events.filter(e => e.type === 'trap_triggered' && e.trap === 'boulder')
       if (boulderEvents.length > 0) {
+        const currentUpgrades = get().tileUpgrades
         const newGrid = get().grid.map(r => [...r])
         boulderEvents.forEach(ev => {
           const [c, r] = ev.trapKey.split(',').map(Number)
-          newGrid[r][c] = TILE.PATH
+          const upgradeTier = currentUpgrades[`${c},${r}`] ?? 0
+          const effBoulder  = upgradeTier >= 2 ? null : true  // T3 respawns, don't remove
+          if (upgradeTier < 2) newGrid[r][c] = TILE.PATH      // T1/T2: remove permanently
+        })
+        set({ grid: newGrid })
+      }
+
+      // Handle Blade Gauntlet / Death Corridor spike respawns
+      if (result.spikeRespawns && result.spikeRespawns.length > 0) {
+        const newGrid = get().grid.map(r => [...r])
+        result.spikeRespawns.forEach(({ col: c, row: r }) => {
+          newGrid[r][c] = TILE.SPIKE
         })
         set({ grid: newGrid })
       }

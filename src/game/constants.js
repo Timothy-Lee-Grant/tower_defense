@@ -501,6 +501,221 @@ export const WAVE_CONFIGS = [
     heroes: ['crusader','crusader','medic','champion','archmage','archmage','warlord','warlord','engineer','berserker','ranger','ranger','cleric','paladin','regenerator'] },
 ]
 
+// ── Upgrade Tiers (Section 8) ─────────────────────────────────────────────
+// Each entry maps a tile ID to an array of [tier2, tier3] upgrade definitions.
+// Each tier has: label, cost (bank gold), stats (overrides merged onto base tool).
+// Special flags (piercing, aura, etc.) are also in stats and read by simulation.js.
+export const UPGRADE_TIERS = {
+  // ── On-path traps ────────────────────────────────────────────────────────
+  [TILE.SPIKE]: [
+    { label: 'Blade Gauntlet', cost: 50,
+      stats: { damage: 45, spikeRegen: 4000 },   // regen after 4 s; still disarmable
+      desc: '45 dmg. Resets after 4 s — no longer one-use.' },
+    { label: 'Death Corridor', cost: 100,
+      stats: { damage: 60, spikeRegen: 4000, doubleSpike: true, noDisarm: true },
+      desc: '60 dmg, triggers twice per step. Cannot be disarmed.' },
+  ],
+  [TILE.BOULDER]: [
+    { label: 'Heavy Boulder', cost: 40,
+      stats: { damage: 90 },
+      desc: '90 dmg. Still one-shot, but much heavier.' },
+    { label: 'Iron Crusher', cost: 80,
+      stats: { damage: 120, boulderRespawn: 12000 },  // respawns after 12 s
+      desc: '120 dmg. Respawns after 12 s.' },
+  ],
+  [TILE.LAVA]: [
+    { label: 'Magma Channel', cost: 60,
+      stats: { dotDamage: 25 },
+      desc: '25 HP/s. Mages still take only half.' },
+    { label: 'Inferno Pit', cost: 120,
+      stats: { dotDamage: 40, lavaSlows: true },
+      desc: '40 HP/s. Also slows heroes caught in it.' },
+  ],
+  [TILE.PIT]: [
+    { label: 'Deep Pit', cost: 60,
+      stats: { damage: 75, pitCooldown: 6000 },
+      desc: '75 dmg + 3 s slow. Resets in 6 s.' },
+    { label: 'Spike Pit', cost: 120,
+      stats: { damage: 100, pitCooldown: 6000, pitSlowMs: 5000 },
+      desc: '100 dmg + 5 s slow. Resets in 6 s.' },
+  ],
+  [TILE.PENDULUM]: [
+    { label: 'Heavy Pendulum', cost: 50,
+      stats: { damage: 60 },
+      desc: '60 dmg during the swing phase.' },
+    { label: 'Guillotine', cost: 100,
+      stats: { damage: 90 },
+      desc: '90 dmg. Lethal precision.' },
+  ],
+  [TILE.TAR]: [
+    { label: 'Thick Tar', cost: 40,
+      stats: { tarSpeedMult: 0.15 },   // 0.15× instead of 0.25×
+      desc: 'Heroes crawl at 15% speed. Brutal choke.' },
+    { label: 'Quicksand', cost: 80,
+      stats: { tarSpeedMult: 0.1, tarDot: 8 },  // also deals 8 HP/s DoT
+      desc: '10% speed + 8 HP/s DoT. Nearly impassable.' },
+  ],
+  [TILE.ELECTRIC]: [
+    { label: 'High Voltage', cost: 70,
+      stats: { damage: 40, electricChain: 25 },
+      desc: '40 dmg + 25 chain to nearest hero.' },
+    { label: 'Tesla Coil', cost: 140,
+      stats: { damage: 60, electricChain: 35, electricDoubleChain: true },
+      desc: '60 dmg + 35 chain to TWO nearest heroes.' },
+  ],
+  [TILE.STASIS]: [
+    { label: 'Extended Stasis', cost: 70,
+      stats: { stasisDuration: 3500 },
+      desc: 'Freezes for 3.5 s.' },
+    { label: 'Deep Freeze', cost: 140,
+      stats: { stasisDuration: 5000, stasisAoe: true },
+      desc: 'Freezes for 5 s. Affects all heroes on the tile.' },
+  ],
+  [TILE.DOOR]: [
+    { label: 'Reinforced Gate', cost: 50,
+      stats: { slow: 0.25 },
+      desc: 'Slows heroes to 25% speed.' },
+    { label: 'Barred Gate', cost: 100,
+      stats: { slow: 0.15, doorAppliesSlow: true },
+      desc: '15% speed + applies the Slowed status for 2 s.' },
+  ],
+
+  // ── Off-path towers ───────────────────────────────────────────────────────
+  [TILE.DART]: [
+    { label: 'Crossbow', cost: 75,
+      stats: { damage: 30, attackSpeed: 850, range: 3.5 },
+      desc: '30 dmg, faster fire rate, slightly longer range.' },
+    { label: 'Ballista', cost: 150,
+      stats: { damage: 50, attackSpeed: 1500, range: 5, piercing: true },
+      desc: '50 dmg, range 5. Dart pierces through first target and hits the next.' },
+  ],
+  [TILE.FIRE]: [
+    { label: 'Flamethrower', cost: 80,
+      stats: { damage: 60, range: 2.5 },
+      desc: '60 dmg, slightly longer reach.' },
+    { label: "Dragon's Breath", cost: 160,
+      stats: { damage: 90, range: 3, slowOnHit: true },
+      desc: '90 dmg, range 3. Burns and slows.' },
+  ],
+  [TILE.POISON]: [
+    { label: 'Toxic Cloud', cost: 70,
+      stats: { damage: 12, range: 2.5, poisonRate: 6 },
+      desc: '12 dmg. Poison ticks at 6 HP/s instead of 3.' },
+    { label: 'Death Mist', cost: 140,
+      stats: { damage: 18, range: 3, poisonRate: 10 },
+      desc: '18 dmg, range 3. Poison ticks at 10 HP/s.' },
+  ],
+  [TILE.ICE]: [
+    { label: 'Blizzard Shard', cost: 75,
+      stats: { damage: 16, range: 3, slowTimer: 3000 },
+      desc: '16 dmg, longer range. Slow lasts 3 s.' },
+    { label: 'Frozen Tomb', cost: 150,
+      stats: { damage: 22, range: 3.5, slowTimer: 5000 },
+      desc: '22 dmg, range 3.5. Slow lasts 5 s.' },
+  ],
+  [TILE.SKELETON]: [
+    { label: 'Veteran Guard', cost: 60,
+      stats: { damage: 28, range: 2.5, attackSpeed: 850 },
+      desc: '28 dmg, range 2.5, faster attacks.' },
+    { label: 'Death Knight', cost: 130,
+      stats: { damage: 40, range: 3, attackSpeed: 800, deathKnightAura: true },
+      desc: '40 dmg, range 3. Aura deals 5 HP/s to all heroes within 1.5 tiles.' },
+  ],
+  [TILE.SLIME]: [
+    { label: 'Acid Slime', cost: 50,
+      stats: { damage: 14, range: 2, attackSpeed: 600 },
+      desc: '14 dmg, slightly longer reach.' },
+    { label: 'Plague Slime', cost: 100,
+      stats: { damage: 20, range: 2.5, attackSpeed: 500, poisonOnHit: true },
+      desc: '20 dmg, range 2.5. Now also poisons on hit.' },
+  ],
+  [TILE.WRAITH]: [
+    { label: 'Elder Wraith', cost: 100,
+      stats: { damage: 45, range: 4 },
+      desc: '45 dmg, slightly longer range.' },
+    { label: 'Banshee', cost: 200,
+      stats: { damage: 65, range: 4.5, aoeAttack: true },
+      desc: '65 dmg, range 4.5. Screech hits ALL heroes in range.' },
+  ],
+  [TILE.TROLL]: [
+    { label: 'Stone Troll', cost: 120,
+      stats: { damage: 50, range: 2.5 },
+      desc: '50 dmg, slightly longer reach.' },
+    { label: 'Mountain Troll', cost: 240,
+      stats: { damage: 70, range: 3 },
+      desc: '70 dmg, range 3. The biggest swing.' },
+  ],
+  [TILE.BAT]: [
+    { label: 'Elder Bat', cost: 65,
+      stats: { damage: 18, range: 2.5, attackSpeed: 480 },
+      desc: '18 dmg, longer reach, faster drain.' },
+    { label: 'Vampire Lord', cost: 130,
+      stats: { damage: 28, range: 3, attackSpeed: 400 },
+      desc: '28 dmg, range 3. Deep drain — permanently shrinks enemy max HP.' },
+  ],
+  [TILE.SHADOW]: [
+    { label: 'Shade', cost: 90,
+      stats: { damage: 32, range: 3.5 },
+      desc: '32 dmg, extra range.' },
+    { label: 'Nightmare', cost: 180,
+      stats: { damage: 48, range: 4, curseOnHit: true },
+      desc: '48 dmg, range 4. Now curses on hit — pairs with Idol.' },
+  ],
+  [TILE.IDOL]: [
+    { label: 'Ancient Idol', cost: 80,
+      stats: { damage: 12, range: 3, cursesPerHit: 2 },
+      desc: '12 dmg, range 3. Applies 2 curse stacks per hit.' },
+    { label: 'Unholy Relic', cost: 160,
+      stats: { damage: 18, range: 3.5, cursesPerHit: 3 },
+      desc: '18 dmg, range 3.5. Maxes curse stacks in a single hit.' },
+  ],
+  [TILE.GARGOYLE]: [
+    { label: 'Stone Gargoyle', cost: 100,
+      stats: { damage: 55, range: 4.5 },
+      desc: '55 dmg, longer range.' },
+    { label: 'Demon Gargoyle', cost: 200,
+      stats: { damage: 78, range: 5 },
+      desc: '78 dmg, range 5. Relentless.' },
+  ],
+  [TILE.CATAPULT]: [
+    { label: 'Siege Engine', cost: 110,
+      stats: { damage: 75, range: 5.5 },
+      desc: '75 dmg, longer range.' },
+    { label: 'Trebuchet', cost: 220,
+      stats: { damage: 110, range: 6, aoeAttack: true },
+      desc: '110 dmg, range 6. Rock now hits ALL heroes in range.' },
+  ],
+  [TILE.SPIDER]: [
+    { label: 'Brood Nest', cost: 70,
+      stats: { damage: 8, range: 2.5, attackSpeed: 350 },
+      desc: '8 dmg, longer reach, faster bites.' },
+    { label: "Widow's Lair", cost: 140,
+      stats: { damage: 12, range: 3, attackSpeed: 280 },
+      desc: '12 dmg, range 3. Relentless venom.' },
+  ],
+  [TILE.MIMIC]: [
+    { label: 'Greater Mimic', cost: 100,
+      stats: { mimicDuration: 2500 },
+      desc: 'Heroes stop for 2.5 s to investigate.' },
+    { label: 'Ancient Mimic', cost: 200,
+      stats: { mimicDuration: 4000, mimicAppliesSlow: true },
+      desc: 'Heroes stop for 4 s. Distracted heroes also become Slowed.' },
+  ],
+}
+
+// Returns the effective tool definition for a tile at the given upgrade tier (0-2).
+// Merges base stats with tier overrides so simulation and UI always see the right values.
+export function getEffectiveTool(tileId, tier = 0) {
+  const base = DUNGEON_TOOLS.find(t => t.id === tileId)
+  if (!base || tier === 0) return base ?? null
+  const tiers = UPGRADE_TIERS[tileId]
+  if (!tiers) return base
+  // tiers[0] = tier 2 upgrade, tiers[1] = tier 3 upgrade
+  const override = tiers[tier - 1]
+  if (!override) return base
+  return { ...base, ...override.stats }
+}
+
 // ── Economy ────────────────────────────────────────────────────────────────
 export const STARTING_GOLD         = 250     // bumped from 200 — longer path needs more setup
 // ── Difficulty Settings ────────────────────────────────────────────────────
