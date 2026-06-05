@@ -31,7 +31,8 @@ export const HERO_PATH_COLORS = {
 // Returns a 2D array where map[row][col] = the number of towers whose range
 // circle includes that tile.  Used to draw the heatmap overlay.
 
-export function computeCoverageMap(grid) {
+export function computeCoverageMap(grid, pathTiles = PATH_TILES) {
+  void pathTiles  // unused in coverage map itself — kept for API consistency
   const rows = grid.length
   const cols = grid[0]?.length ?? 0
   const map  = Array.from({ length: rows }, () => new Array(cols).fill(0))
@@ -55,7 +56,7 @@ export function computeCoverageMap(grid) {
 // 0.0 = takes many times their HP in damage (certain death).
 // This is an estimate, not a simulation — good for directional guidance.
 
-export function estimateSurvival(heroTypeId, grid) {
+export function estimateSurvival(heroTypeId, grid, pathTiles = PATH_TILES) {
   const hero = HERO_TYPES[heroTypeId]
   if (!hero) return 0.5
 
@@ -64,7 +65,7 @@ export function estimateSurvival(heroTypeId, grid) {
   let damage  = 0
 
   // ── On-path trap damage (heroes walk over these tiles) ──
-  for (const pt of PATH_TILES) {
+  for (const pt of pathTiles) {
     const tileId = grid[pt.row]?.[pt.col]
     if (!tileId) continue
 
@@ -92,8 +93,8 @@ export function estimateSurvival(heroTypeId, grid) {
       const tool = DUNGEON_TOOLS.find(t => t.id === grid[r][c] && t.range && t.damage)
       if (!tool) continue
 
-      // Count how many PATH_TILES this tower covers (both outbound + return legs)
-      const covered = PATH_TILES.filter(
+      // Count how many pathTiles this tower covers (both outbound + return legs)
+      const covered = pathTiles.filter(
         pt => Math.sqrt((pt.col - c) ** 2 + (pt.row - r) ** 2) <= tool.range
       ).length
       if (covered === 0) continue
@@ -113,7 +114,7 @@ export function estimateSurvival(heroTypeId, grid) {
 
   // ── Self-healing offsets some damage ──
   if (hero.selfHealRate) {
-    const totalPathTime = PATH_TILES.length / speed
+    const totalPathTime = pathTiles.length / speed
     // Conservative: assume hero heals at ~60% efficiency (doesn't always have full HP)
     damage -= hero.selfHealRate * totalPathTime * 0.6
   }

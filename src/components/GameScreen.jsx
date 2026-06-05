@@ -244,6 +244,7 @@ const upgradeStyles = {
 
 function PlanHints() {
   const waveIndex        = useGameStore(s => s.waveIndex)
+  const layoutData       = useGameStore(s => s.layoutData)
   const grid             = useGameStore(s => s.grid)
   const showPathPreview  = useGameStore(s => s.showPathPreview)
   const [copyMsg, setCopyMsg] = useState('')
@@ -274,7 +275,7 @@ function PlanHints() {
   // Threat assessment — survivability per hero type, memoised on grid change
   const threatData = useMemo(() => uniqueHeroIds.map(heroId => ({
     heroId,
-    survival:  estimateSurvival(heroId, grid),
+    survival:  estimateSurvival(heroId, grid, layoutData.pathTiles),
     warnings:  getImmunityWarnings(heroId, grid),
     count:     nextHeroes.filter(h => h === heroId).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -21,6 +21,7 @@ function buildEmptyGrid() {
 
 export default function MainMenu() {
   const startGame        = useGameStore(s => s.startGame)
+  const goToCampaign     = useGameStore(s => s.goToCampaign)
   const loadGame         = useGameStore(s => s.loadGame)
   const setDifficulty    = useGameStore(s => s.setDifficulty)
   const setPendingLayout = useGameStore(s => s.setPendingLayout)
@@ -175,7 +176,10 @@ export default function MainMenu() {
             </button>
           )}
           <button style={styles.primaryBtn} onClick={handleStart}>
-            ⚔ New Campaign
+            ⚔ Quick Play
+          </button>
+          <button style={styles.campaignBtn} onClick={() => { audio.init(); audio.play('btn_click'); goToCampaign() }}>
+            🗺 Campaign Map
           </button>
         </div>
 
@@ -426,6 +430,12 @@ const styles = {
     fontSize: '0.9rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.03em',
     boxShadow: '0 4px 20px rgba(232,196,74,0.2)',
+  },
+  campaignBtn: {
+    background: 'rgba(200,160,72,0.12)', color: '#c8a048',
+    border: '1px solid rgba(200,160,72,0.4)', borderRadius: 6, padding: '0.6rem 1.6rem',
+    fontSize: '0.9rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    cursor: 'pointer', letterSpacing: '0.03em',
   },
   tagline: {
     fontFamily: "'Crimson Text', serif", fontSize: '1rem',

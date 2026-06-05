@@ -45,9 +45,14 @@ export function buildSaveData(state) {
     waveIndex:     state.waveIndex,          // the UPCOMING wave (0-based)
     grid:          state.grid,
     gold:          state.gold,
-    bank:          state.bank,
-    tileUpgrades:  state.tileUpgrades ?? {},
-    unlockedTools: state.unlockedTools,
+    bank:           state.bank,
+    tileUpgrades:   state.tileUpgrades ?? {},
+    activeLayoutId: state.activeLayoutId ?? 'catacombs',
+    campaignNodeId: state.campaignNodeId ?? null,
+    activeModifier: state.activeModifier ?? 'none',
+    isEndlessMode:  state.isEndlessMode ?? false,
+    endlessWave:    state.endlessWave ?? 0,
+    unlockedTools:  state.unlockedTools,
     treasureHp:    state.treasureHp,         // end-of-last-wave HP (display only)
     treasureMaxHp: state.treasureMaxHp,
   }
@@ -133,6 +138,37 @@ export function favoriteTool(stats) {
   const entries = Object.entries(stats.toolCounts ?? {})
   if (entries.length === 0) return null
   return entries.sort((a, b) => b[1] - a[1])[0][0]
+}
+
+// ── Campaign Progress ─────────────────────────────────────────────────────────
+const CAMPAIGN_KEY = 'da_campaign'
+
+// Returns { [nodeId]: starsEarned (0–3) }
+export function readCampaignProgress() {
+  try {
+    const raw = localStorage.getItem(CAMPAIGN_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+// Record stars earned for a campaign node (keeps best).
+export function recordCampaignNode(nodeId, stars) {
+  const progress = readCampaignProgress()
+  progress[nodeId] = Math.max(progress[nodeId] ?? 0, stars)
+  try { localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(progress)) } catch {}
+}
+
+// ── Endless Mode High Score ───────────────────────────────────────────────────
+const ENDLESS_KEY = 'da_endless_high'
+
+export function readEndlessHigh() {
+  try { return Number(localStorage.getItem(ENDLESS_KEY) ?? 0) } catch { return 0 }
+}
+
+export function recordEndlessHigh(wavesReached) {
+  const current = readEndlessHigh()
+  if (wavesReached > current)
+    try { localStorage.setItem(ENDLESS_KEY, String(wavesReached)) } catch {}
 }
 
 // ── Layout export / import (6.4 — grid snapshot sharing) ─────────────────────

@@ -8,7 +8,11 @@ export default function VictoryScreen() {
   const bank          = useGameStore(s => s.bank)
   const treasureHp    = useGameStore(s => s.treasureHp)
   const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
-  const goToMenu      = useGameStore(s => s.goToMenu)
+  const goToMenu           = useGameStore(s => s.goToMenu)
+  const startEndlessMode   = useGameStore(s => s.startEndlessMode)
+  const goToCampaign       = useGameStore(s => s.goToCampaign)
+  const campaignNodeId     = useGameStore(s => s.campaignNodeId)
+  const isEndlessMode      = useGameStore(s => s.isEndlessMode)
 
   return (
     <div style={s.root}>
@@ -36,9 +40,21 @@ export default function VictoryScreen() {
           </p>
         </div>
 
-        <button style={s.btn} onClick={goToMenu}>
-          ↩ Return to Main Menu
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', alignSelf: 'center' }}>
+          {!isEndlessMode && (
+            <button style={s.endlessBtn} onClick={startEndlessMode} title="Waves continue scaling forever">
+              ∞ Endless Mode
+            </button>
+          )}
+          {campaignNodeId && (
+            <button style={s.campaignBtn} onClick={goToCampaign}>
+              🗺 Campaign Map
+            </button>
+          )}
+          <button style={s.btn} onClick={goToMenu}>
+            ↩ Main Menu
+          </button>
+        </div>
 
       </div>
     </div>
@@ -118,5 +134,19 @@ const s = {
     cursor: 'pointer', letterSpacing: '0.04em',
     boxShadow: '0 2px 16px rgba(232,196,74,0.25)',
     alignSelf: 'center',
+  },
+  endlessBtn: {
+    background: 'rgba(100,140,200,0.12)', color: '#8ab0cc',
+    border: '1px solid rgba(100,140,200,0.3)', borderRadius: 6,
+    padding: '0.65rem 1.4rem',
+    fontSize: '0.85rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    cursor: 'pointer', letterSpacing: '0.04em',
+  },
+  campaignBtn: {
+    background: 'rgba(200,160,72,0.10)', color: '#c8a048',
+    border: '1px solid rgba(200,160,72,0.3)', borderRadius: 6,
+    padding: '0.65rem 1.4rem',
+    fontSize: '0.85rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    cursor: 'pointer', letterSpacing: '0.04em',
   },
 }

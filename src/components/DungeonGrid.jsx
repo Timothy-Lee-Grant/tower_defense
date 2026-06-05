@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, TREASURE, ENTRANCE, PATH_TILES, WAVE_CONFIGS } from '../game/constants.js'
+import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, WAVE_CONFIGS } from '../game/constants.js'
 import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
 import { ParticleSystem, PARTICLE_EFFECTS } from '../rendering/particles.js'
 import { computeCoverageMap, HERO_PATH_COLORS } from '../game/analysis.js'
@@ -74,6 +74,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const treasureHp       = useGameStore(s => s.treasureHp)
   const trapTimers       = useGameStore(s => s.trapTimers)
   const tileUpgrades     = useGameStore(s => s.tileUpgrades)
+  const layoutData       = useGameStore(s => s.layoutData)
   const showPathPreview  = useGameStore(s => s.showPathPreview)
   const showCoverageMap  = useGameStore(s => s.showCoverageMap)
   const waveIndex        = useGameStore(s => s.waveIndex)
@@ -87,11 +88,13 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const attackFlashesRef  = useRef(attackFlashes)
   const trapTimersRef     = useRef(trapTimers)
   const tileUpgradesRef   = useRef(tileUpgrades)
+  const layoutDataRef     = useRef(layoutData)
   heroesRef.current        = heroes
   gridRef.current          = grid
   attackFlashesRef.current = attackFlashes
   trapTimersRef.current    = trapTimers
   tileUpgradesRef.current  = tileUpgrades
+  layoutDataRef.current    = layoutData
 
   // ── Juice state refs (mutated directly by effects, read in draw loop) ─────
   const psRef              = useRef(new ParticleSystem())   // particle system
@@ -110,7 +113,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
   // Recompute coverage map when grid changes or overlay toggled
   useEffect(() => {
-    coverageMapRef.current = showCoverageMap ? computeCoverageMap(grid) : null
+    coverageMapRef.current = showCoverageMap ? computeCoverageMap(grid, layoutDataRef.current.pathTiles) : null
   }, [grid, showCoverageMap])
 
   // Recompute hero types for path preview when wave index or overlay changes
@@ -176,8 +179,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     if (newlySpawned.length > 0) {
       heroEntryRef.current = performance.now()
       ps.emit(
-        ENTRANCE.col * TILE_SIZE + TILE_SIZE / 2,
-        ENTRANCE.row * TILE_SIZE + TILE_SIZE / 2,
+        layoutDataRef.current.entrance.col * TILE_SIZE + TILE_SIZE / 2,
+        layoutDataRef.current.entrance.row * TILE_SIZE + TILE_SIZE / 2,
         PARTICLE_EFFECTS.spawn_flash,
       )
     }
@@ -223,8 +226,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   // ── Treasure damage flash + particles ────────────────────────────────────
   useEffect(() => {
     if (treasureHp < prevTreasureHpRef.current) {
-      const tx = TREASURE.col * TILE_SIZE + TILE_SIZE / 2
-      const ty = TREASURE.row * TILE_SIZE + TILE_SIZE / 2
+      const tx = layoutDataRef.current.treasure.col * TILE_SIZE + TILE_SIZE / 2
+      const ty = layoutDataRef.current.treasure.row * TILE_SIZE + TILE_SIZE / 2
       const damage = Math.round(prevTreasureHpRef.current - treasureHp)
       psRef.current.emit(tx, ty, PARTICLE_EFFECTS.gold_sparkle)
       psRef.current.emitText(tx, ty - 20, `-${damage}`, DMG_COLOR.treasure, 13)
@@ -392,7 +395,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         }
       }
       // Red warning on path tiles with zero coverage — these are gaps!
-      for (const pt of PATH_TILES) {
+      for (const pt of layoutDataRef.current.pathTiles) {
         if ((cmap[pt.row]?.[pt.col] ?? 0) === 0) {
           ctx.fillStyle = 'rgba(220,40,40,0.22)'
           ctx.fillRect(pt.col * TILE_SIZE, pt.row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
@@ -402,7 +405,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.font = `bold 9px monospace`
       ctx.textAlign    = 'center'
       ctx.textBaseline = 'middle'
-      for (const pt of PATH_TILES) {
+      for (const pt of layoutDataRef.current.pathTiles) {
         const count = cmap[pt.row]?.[pt.col] ?? 0
         if (count === 0) continue
         ctx.fillStyle = count >= 3 ? 'rgba(80,255,100,0.9)' : 'rgba(180,255,180,0.8)'
@@ -430,11 +433,11 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         ctx.beginPath()
 
         let started = false
-        for (let i = 0; i < PATH_TILES.length; i++) {
-          const tile     = PATH_TILES[i]
+        for (let i = 0; i < layoutDataRef.current.pathTiles.length; i++) {
+          const tile     = layoutDataRef.current.pathTiles[i]
           // Compute perpendicular offset from averaged direction between neighbors
-          const prev     = PATH_TILES[Math.max(0, i - 1)]
-          const next     = PATH_TILES[Math.min(PATH_TILES.length - 1, i + 1)]
+          const prev     = layoutDataRef.current.pathTiles[Math.max(0, i - 1)]
+          const next     = layoutDataRef.current.pathTiles[Math.min(layoutDataRef.current.pathTiles.length - 1, i + 1)]
           const dx       = next.col - prev.col
           const dy       = next.row - prev.row
           const len      = Math.sqrt(dx * dx + dy * dy) || 1
@@ -455,8 +458,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       // Small legend dots at the entrance for each hero type
       previewTypes.forEach((heroTypeId, idx) => {
         const color  = HERO_PATH_COLORS[heroTypeId] ?? '#ffffff'
-        const ex     = ENTRANCE.col * TILE_SIZE + TILE_SIZE / 2
-        const ey     = ENTRANCE.row * TILE_SIZE - 6 - idx * 7
+        const ex     = layoutDataRef.current.entrance.col * TILE_SIZE + TILE_SIZE / 2
+        const ey     = layoutDataRef.current.entrance.row * TILE_SIZE - 6 - idx * 7
         ctx.fillStyle = color
         ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fill()
       })
@@ -489,8 +492,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     const entranceElapsed = t - heroEntryRef.current
     if (entranceElapsed < 500 && heroEntryRef.current > 0) {
       const alpha = Math.max(0, 1 - entranceElapsed / 500)
-      const ex = ENTRANCE.col * TILE_SIZE
-      const ey = ENTRANCE.row * TILE_SIZE
+      const ex = layoutDataRef.current.entrance.col * TILE_SIZE
+      const ey = layoutDataRef.current.entrance.row * TILE_SIZE
       ctx.save()
       ctx.globalAlpha = alpha * 0.7
       ctx.fillStyle   = '#c8a0ff'
@@ -714,8 +717,8 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         flash.active = false
       } else {
         const alpha = Math.max(0, 1 - elapsed / 500) * 0.55
-        const tx    = TREASURE.col * TILE_SIZE
-        const ty    = TREASURE.row * TILE_SIZE
+        const tx    = layoutDataRef.current.treasure.col * TILE_SIZE
+        const ty    = layoutDataRef.current.treasure.row * TILE_SIZE
         ctx.save()
         ctx.globalAlpha = alpha
         ctx.fillStyle   = '#ff2020'

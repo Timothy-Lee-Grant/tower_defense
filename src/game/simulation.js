@@ -25,11 +25,12 @@ const PHYSICAL_TILES = new Set([TILE.SPIKE, TILE.BOULDER, TILE.DART, TILE.SKELET
 // ── Hero factory ───────────────────────────────────────────────────────────
 
 // hpMult scales HP and healing proportionally to the wave's difficulty.
+// pathTiles: the active layout's path (defaults to Catacombs for backwards compat).
 // Healing scales as sqrt(hpMult) so healers stay useful but don't trivialise damage.
 // goldValue scales so kill rewards reflect the effort involved.
-export function createHero(heroType, spawnIndex, hpMult = 1) {
+export function createHero(heroType, spawnIndex, hpMult = 1, pathTiles = PATH_TILES) {
   const scaledHp    = Math.round(heroType.hp * hpMult)
-  const healScale   = Math.sqrt(hpMult)    // gentler scaling so healing never trivialises damage
+  const healScale   = Math.sqrt(hpMult)
   const baseGold    = HERO_KILL_GOLD[heroType.id] ?? 30
   return {
     id:             `hero_${Date.now()}_${spawnIndex}`,
@@ -39,20 +40,20 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
     color:          heroType.color,
     hp:             scaledHp,
     maxHp:          scaledHp,
-    baseMaxHp:      scaledHp,   // original max — used to visualise bat-drain desaturation
+    baseMaxHp:      scaledHp,
     speed:          heroType.speed,
     canDisarm:      heroType.canDisarm,
     heals:          heroType.heals,
-    stasisTimer:      0,   // > 0 = frozen; immune to damage, can't move
-    distractedTimer:  0,   // > 0 = stopped by Mimic; can still take damage
-    distractedByMimics: [], // trapKeys of mimics already used on this hero (immune after 1st)
+    stasisTimer:      0,
+    distractedTimer:  0,
+    distractedByMimics: [],
     fireResist:     heroType.fireResist ?? 1,
     goldSpeedMult:  heroType.goldSpeedMult ?? 1,
-    // Pixel/grid position — starts at entrance (PATH_TILES[0])
-    col:            PATH_TILES[0].col,
-    row:            PATH_TILES[0].row,
-    x:              PATH_TILES[0].col * TILE_SIZE + TILE_SIZE / 2,
-    y:              PATH_TILES[0].row * TILE_SIZE + TILE_SIZE / 2,
+    // Pixel/grid position — starts at entrance (pathTiles[0])
+    col:            pathTiles[0].col,
+    row:            pathTiles[0].row,
+    x:              pathTiles[0].col * TILE_SIZE + TILE_SIZE / 2,
+    y:              pathTiles[0].row * TILE_SIZE + TILE_SIZE / 2,
     pathIndex:      0,
     // State
     state:          'moving',   // moving | dead | escaped
@@ -85,8 +86,9 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
 // ── Main tick ──────────────────────────────────────────────────────────────
 // Returns { heroes, events, treasureDamage, goldEarned, trapTimers }
 // tileUpgrades: optional map of "col,row" → tier (0-2) for upgrade system
+// pathTiles: the active layout's path (defaults to Catacombs for backwards compat)
 
-export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}) {
+export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}, pathTiles = PATH_TILES) {
   const events = []
   let treasureDamage = 0
   let goldEarned     = 0
@@ -190,7 +192,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
     // ── Movement ──
 
-    const nextTile = PATH_TILES[hero.pathIndex + 1]
+    const nextTile = pathTiles[hero.pathIndex + 1]
 
     if (!nextTile) {
       // Already at the last tile (entrance = escape point)
@@ -270,7 +272,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       }
 
       // Escape check — completed the full loop
-      if (hero.pathIndex >= PATH_TILES.length - 1) {
+      if (hero.pathIndex >= pathTiles.length - 1) {
         events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold })
         updatedHeroes.push({ ...hero, state: 'escaped' })
         continue

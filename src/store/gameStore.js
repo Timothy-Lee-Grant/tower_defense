@@ -4,28 +4,46 @@ import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
   SELL_REFUND_RATE, BANK_COST_MULT, WAVE_CONFIGS,
   HERO_TYPES, DIFFICULTIES, UPGRADE_TIERS,
-  PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
+  DUNGEON_LAYOUTS, CAMPAIGN_NODES, CAMPAIGN_MODIFIERS, buildLayoutData,
 } from '../game/constants.js'
 import { createHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
 import { getHeroCallout } from '../game/gerald.js'
-import { writeSave, recordRunEnd, SAVE_SLOTS } from '../game/persistence.js'
+import {
+  writeSave, recordRunEnd, SAVE_SLOTS,
+  recordCampaignNode, readCampaignProgress, recordEndlessHigh, readEndlessHigh,
+} from '../game/persistence.js'
 
-// ── Grid factory ───────────────────────────────────────────────────────────
-function makeInitialGrid() {
+// ── Layout-aware grid factory ──────────────────────────────────────────────
+function makeGridFromLayout(layoutData) {
   const grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(TILE.EMPTY))
-  for (const pt of PATH_ALL) grid[pt.row][pt.col] = TILE.PATH
-  grid[ENTRANCE.row][ENTRANCE.col] = TILE.ENTRANCE
-  grid[TREASURE.row][TREASURE.col] = TILE.TREASURE
+  for (const pt of layoutData.pathAll) grid[pt.row][pt.col] = TILE.PATH
+  grid[layoutData.entrance.row][layoutData.entrance.col] = TILE.ENTRANCE
+  grid[layoutData.treasure.row][layoutData.treasure.col] = TILE.TREASURE
   return grid
 }
 
-export const PHASE = { MENU: 'menu', PLAN: 'plan', WAVE: 'wave', RESULTS: 'results', VICTORY: 'victory' }
+export const PHASE = {
+  MENU: 'menu', CAMPAIGN: 'campaign',
+  PLAN: 'plan', WAVE: 'wave', RESULTS: 'results',
+  VICTORY: 'victory', ENDLESS: 'endless_results',
+}
 
 // ── Store ──────────────────────────────────────────────────────────────────
+const _defaultLayout     = buildLayoutData(DUNGEON_LAYOUTS[0])
+
 export const useGameStore = create((set, get) => ({
   phase:          PHASE.MENU,
-  grid:           makeInitialGrid(),
+
+  // ── Layout / Campaign ──────────────────────────────────────────────────
+  activeLayoutId:  'catacombs',
+  layoutData:      _defaultLayout,
+  campaignNodeId:  null,    // null = free play; string = active campaign node
+  activeModifier:  'none',  // key into CAMPAIGN_MODIFIERS
+  isEndlessMode:   false,
+  endlessWave:     0,       // waves survived past the final WAVE_CONFIGS entry
+
+  grid:           makeGridFromLayout(_defaultLayout),
   selectedTool:   null,
   selectedCategory: 'traps',
 
@@ -74,12 +92,67 @@ export const useGameStore = create((set, get) => ({
     set({ difficulty: id, treasureMaxHp: diff.treasureHp, treasureHp: diff.treasureHp })
   },
 
-  startGame() {
-    const diff    = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
-    const pending = get().pendingLayout
+  // ── Layout selection ────────────────────────────────────────────────────────
+  selectLayout(layoutId) {
+    const layout = DUNGEON_LAYOUTS.find(l => l.id === layoutId) ?? DUNGEON_LAYOUTS[0]
+    const layoutData = buildLayoutData(layout)
+    set({ activeLayoutId: layoutId, layoutData, grid: makeGridFromLayout(layoutData) })
+  },
+
+  // ── Campaign navigation ─────────────────────────────────────────────────────
+  goToCampaign() { set({ phase: PHASE.CAMPAIGN }) },
+
+  startCampaignNode(nodeId) {
+    const node = CAMPAIGN_NODES.find(n => n.id === nodeId)
+    if (!node) return
+    const layout     = DUNGEON_LAYOUTS.find(l => l.id === node.layoutId) ?? DUNGEON_LAYOUTS[0]
+    const layoutData = buildLayoutData(layout)
+    const diff       = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
     set({
-      phase: PHASE.PLAN,
-      grid:  pending ?? makeInitialGrid(),
+      phase:           PHASE.PLAN,
+      campaignNodeId:  nodeId,
+      activeLayoutId:  node.layoutId,
+      activeModifier:  node.modifier,
+      layoutData,
+      grid:            makeGridFromLayout(layoutData),
+      gold:            diff.startingGold,
+      bank:            0,
+      waveIndex:       0,
+      tileUpgrades:    {},
+      isEndlessMode:   false,
+      endlessWave:     0,
+      treasureMaxHp:   diff.treasureHp,
+      treasureHp:      diff.treasureHp,
+      heroesKilled: 0, runKills: 0,
+      heroesEscapedWithGold: 0, heroesEscapedEmpty: 0,
+      goldEarnedThisWave: 0, goldStolenThisWave: 0,
+      battleLog: [], attackFlashes: [],
+      unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
+      pendingLayout: null,
+    })
+  },
+
+  // ── Endless mode ────────────────────────────────────────────────────────────
+  startEndlessMode() {
+    set({ isEndlessMode: true, endlessWave: 0, phase: PHASE.PLAN })
+    // Re-enter plan phase so player can adjust before the next endless wave
+    const { waveIndex } = get()
+    const baseGold = WAVE_CONFIGS[WAVE_CONFIGS.length - 1]?.gold ?? 300
+    const diff     = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    set({ gold: Math.round(baseGold * diff.waveGoldMult) })
+  },
+
+  startGame() {
+    const diff       = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    const pending    = get().pendingLayout
+    const layoutData = get().layoutData
+    set({
+      phase:          PHASE.PLAN,
+      campaignNodeId: null,
+      activeModifier: 'none',
+      isEndlessMode:  false,
+      endlessWave:    0,
+      grid:  pending ?? makeGridFromLayout(layoutData),
       gold:  diff.startingGold,
       bank:  0,
       waveIndex: 0,
@@ -101,16 +174,14 @@ export const useGameStore = create((set, get) => ({
 
   goToMenu() {
     const { phase, difficulty, waveIndex, runKills, grid } = get()
-    // Record stats whenever quitting an in-progress run (not from menu itself)
-    if (phase !== PHASE.MENU && phase !== PHASE.VICTORY) {
+    if (phase !== PHASE.MENU && phase !== PHASE.VICTORY && phase !== PHASE.CAMPAIGN) {
       recordRunEnd({ difficulty, waveIndex, heroesKilled: runKills, grid })
     }
-    set({ phase: PHASE.MENU })
+    set({ phase: PHASE.MENU, campaignNodeId: null, activeModifier: 'none' })
   },
 
   triggerScreenShake(intensity) {
     set({ screenShake: intensity })
-    // Reset one frame later so next shake of same intensity still fires subscription
     setTimeout(() => set({ screenShake: 0 }), 16)
   },
   selectTool(id)  { set({ selectedTool: id }) },
@@ -121,11 +192,20 @@ export const useGameStore = create((set, get) => ({
 
   // ── Restore from a saved game ──────────────────────────────────────────────
   loadGame(saveData) {
+    const layoutId   = saveData.activeLayoutId ?? 'catacombs'
+    const layout     = DUNGEON_LAYOUTS.find(l => l.id === layoutId) ?? DUNGEON_LAYOUTS[0]
+    const layoutData = buildLayoutData(layout)
     set({
-      phase:         PHASE.PLAN,
-      difficulty:    saveData.difficulty,
-      waveIndex:     saveData.waveIndex,
-      grid:          saveData.grid,
+      phase:          PHASE.PLAN,
+      difficulty:     saveData.difficulty,
+      waveIndex:      saveData.waveIndex,
+      grid:           saveData.grid,
+      activeLayoutId: layoutId,
+      layoutData,
+      campaignNodeId: saveData.campaignNodeId ?? null,
+      activeModifier: saveData.activeModifier ?? 'none',
+      isEndlessMode:  saveData.isEndlessMode ?? false,
+      endlessWave:    saveData.endlessWave ?? 0,
       gold:          saveData.gold,
       bank:          saveData.bank,
       tileUpgrades:  saveData.tileUpgrades ?? {},
@@ -160,10 +240,11 @@ export const useGameStore = create((set, get) => ({
     const def = DUNGEON_TOOLS.find(t => t.id === selectedTool)
     if (!def || gold < def.cost) return
 
+    const { pathSet, pathCenterSet } = get().layoutData
     const ON_PATH_TRAPS = [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA,
                            TILE.PIT, TILE.PENDULUM, TILE.TAR, TILE.ELECTRIC, TILE.STASIS]
-    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
-    const anyPath = PATH_SET.has(`${col},${row}`)
+    const onCenterline = pathCenterSet.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
+    const anyPath = pathSet.has(`${col},${row}`)
 
     if (def.placesOn === 'path' && !onCenterline) return
     if (def.placesOn === 'open' && (anyPath || cur !== TILE.EMPTY)) return
@@ -177,7 +258,7 @@ export const useGameStore = create((set, get) => ({
   // ── Emergency placement during waves — costs from bank at 1.5× ────────────
   bankPlaceTile(col, row) {
     const { grid, selectedTool, bank, unlockedTools, phase } = get()
-    if (phase !== PHASE.WAVE) return   // wave phase only
+    if (phase !== PHASE.WAVE) return
     if (!selectedTool || !unlockedTools.includes(selectedTool)) return
 
     const cur = grid[row]?.[col]
@@ -189,10 +270,11 @@ export const useGameStore = create((set, get) => ({
     const cost = Math.ceil(def.cost * BANK_COST_MULT)
     if (bank < cost) return
 
+    const { pathSet, pathCenterSet } = get().layoutData
     const ON_PATH_TRAPS = [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA,
                            TILE.PIT, TILE.PENDULUM, TILE.TAR, TILE.ELECTRIC, TILE.STASIS]
-    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
-    const anyPath = PATH_SET.has(`${col},${row}`)
+    const onCenterline = pathCenterSet.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
+    const anyPath = pathSet.has(`${col},${row}`)
 
     if (def.placesOn === 'path' && !onCenterline) return
     if (def.placesOn === 'open' && (anyPath || cur !== TILE.EMPTY)) return
@@ -210,10 +292,10 @@ export const useGameStore = create((set, get) => ({
         tileId === TILE.ENTRANCE || tileId === TILE.TREASURE) return
 
     const def    = DUNGEON_TOOLS.find(t => t.id === tileId)
-    // Sell refund: base cost × 50% only — upgrades are not refunded
     const refund = def ? Math.floor(def.cost * SELL_REFUND_RATE) : 0
     const newGrid = grid.map(r => [...r])
-    newGrid[row][col] = PATH_CENTER_SET.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
+    const { pathCenterSet } = get().layoutData
+    newGrid[row][col] = pathCenterSet.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
     const newUpgrades = { ...tileUpgrades }
     delete newUpgrades[`${col},${row}`]
     set({ grid: newGrid, gold: gold + refund, tileUpgrades: newUpgrades })
@@ -246,17 +328,37 @@ export const useGameStore = create((set, get) => ({
   },
 
   startWave() {
-    const { waveIndex } = get()
-    const waveConfig = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
+    const { waveIndex, layoutData, activeModifier, isEndlessMode, endlessWave } = get()
+
+    // ── Endless mode: generate wave beyond WAVE_CONFIGS ──────────────────────
+    const isEndlessWave = waveIndex >= WAVE_CONFIGS.length
+    const waveConfig = isEndlessWave
+      ? {
+          wave:   waveIndex + 1,
+          hpMult: 9.0 * Math.pow(1.15, waveIndex - (WAVE_CONFIGS.length - 1)),
+          gold:   600,
+          label:  `Endless Wave ${waveIndex - WAVE_CONFIGS.length + 2}`,
+          heroes: WAVE_CONFIGS[WAVE_CONFIGS.length - 1].heroes,   // repeat final composition
+        }
+      : (WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1])
 
     const diff     = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
     const waveMult = waveConfig.hpMult ?? 1
-    // effectiveMult: wave 1 is identical across all difficulties (waveMult=1 → result=1).
-    // The gap widens in later waves where waveMult reaches 9.0 on hard.
     const effectiveMult = 1.0 + (waveMult - 1.0) * diff.hpScaling
-    const heroes = waveConfig.heroes.map((heroId, i) =>
-      createHero(HERO_TYPES[heroId], i, effectiveMult)
-    )
+
+    // ── Modifier: group_spawn — remove stagger delay ─────────────────────────
+    const isGroupSpawn = activeModifier === 'group_spawn'
+    // ── Modifier: hero_speed — apply speed multiplier ────────────────────────
+    const speedMult = activeModifier === 'hero_speed' ? 1.25 : 1.0
+
+    const heroes = waveConfig.heroes.map((heroId, i) => {
+      const base = createHero(HERO_TYPES[heroId], isGroupSpawn ? 0 : i, effectiveMult, layoutData.pathTiles)
+      if (speedMult !== 1.0) return { ...base, speed: base.speed * speedMult }
+      // Modifier: thieves_disarm_all — thieves can disarm any on-path trap
+      if (activeModifier === 'thieves_disarm_all' && heroId === 'thief')
+        return { ...base, canDisarmAll: true }
+      return base
+    })
 
     audio.play('wave_start')
 
@@ -288,7 +390,10 @@ export const useGameStore = create((set, get) => ({
       const deltaMs = Math.min(now - lastTime, 100) // cap delta to avoid huge jumps
       lastTime = now
 
-      const result = simulationTick(state.heroes, state.grid, deltaMs, state.trapTimers, state.tileUpgrades)
+      const result = simulationTick(
+        state.heroes, state.grid, deltaMs, state.trapTimers,
+        state.tileUpgrades, state.layoutData.pathTiles
+      )
 
       // ── Audio + screen shake events ────────────────────────────────────────
       result.events.forEach(ev => {
@@ -469,7 +574,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   endWave() {
-    const { simulationRef, waveIndex, unlockedTools, difficulty } = get()
+    const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
     audio.play('wave_cleared')
 
@@ -479,23 +584,26 @@ export const useGameStore = create((set, get) => ({
     const locked   = DUNGEON_TOOLS.filter(t => !unlockedTools.includes(t.id))
     const shuffled = [...locked].sort(() => Math.random() - 0.5)
     const cards    = shuffled.slice(0, Math.min(3, shuffled.length)).map(tool => ({ type: 'unlock', tool }))
-    // Gold reward scales with wave AND difficulty
     const goldReward = Math.round(Math.min(80 + waveIndex * 12, 200) * diff.waveGoldMult)
     while (cards.length < 3) cards.push({ type: 'gold', amount: goldReward })
 
-    // Apply waveGoldMult to the next wave's planning budget
-    const baseGold = WAVE_CONFIGS[waveIndex + 1]?.gold ?? 300
+    const isLastDefinedWave = waveIndex + 1 >= WAVE_CONFIGS.length
+    const baseGold = isEndlessMode || isLastDefinedWave
+      ? 600
+      : Math.round((WAVE_CONFIGS[waveIndex + 1]?.gold ?? 300) * diff.waveGoldMult)
+
     set({
       phase:         PHASE.RESULTS,
       simulationRef: null,
       upgradeCards:  cards,
-      gold:          Math.round(baseGold * diff.waveGoldMult),
+      gold:          baseGold,
       attackFlashes: [],
     })
   },
 
   pickUpgradeCard(card) {
-    const { waveIndex, unlockedTools } = get()
+    const { waveIndex, unlockedTools, isEndlessMode, campaignNodeId,
+            treasureHp, treasureMaxHp, runKills } = get()
     if (card.type === 'unlock') {
       set({ unlockedTools: [...unlockedTools, card.tool.id] })
       audio.play('upgrade_unlock')
@@ -504,27 +612,40 @@ export const useGameStore = create((set, get) => ({
       audio.play('upgrade_gold')
     }
 
-    const nextWaveIndex = waveIndex + 1
-    const isLastWave    = nextWaveIndex >= WAVE_CONFIGS.length
-    set({
-      phase:        isLastWave ? PHASE.VICTORY : PHASE.PLAN,
-      waveIndex:    nextWaveIndex,
-      upgradeCards: [],
-      heroes:       [],
-    })
+    const nextWaveIndex    = waveIndex + 1
+    const isLastDefinedWave = nextWaveIndex >= WAVE_CONFIGS.length
 
-    const fresh = get()
-    if (isLastWave) {
-      // Run complete — record stats (don't auto-save; game is over)
-      recordRunEnd({
-        difficulty:   fresh.difficulty,
-        waveIndex:    fresh.waveIndex,
-        heroesKilled: fresh.runKills,   // full-run total, not just last wave
-        grid:         fresh.grid,
-      })
+    // If in endless mode, keep going forever
+    if (isEndlessMode) {
+      const endlessWavesAdded = nextWaveIndex - WAVE_CONFIGS.length + 1
+      recordEndlessHigh(endlessWavesAdded)
+      set({ phase: PHASE.PLAN, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [],
+            endlessWave: endlessWavesAdded })
+      writeSave(SAVE_SLOTS.auto, get())
+      return
+    }
+
+    if (isLastDefinedWave) {
+      // Run complete — record stats and campaign progress
+      const fresh = get()
+      recordRunEnd({ difficulty: fresh.difficulty, waveIndex: nextWaveIndex,
+                     heroesKilled: fresh.runKills, grid: fresh.grid })
+      // Campaign: evaluate stars for this node
+      if (campaignNodeId) {
+        const node = CAMPAIGN_NODES.find(n => n.id === campaignNodeId)
+        if (node) {
+          const runState = { waveIndex: nextWaveIndex, treasureHp, treasureMaxHp, runKills }
+          let stars = 0
+          for (let si = 0; si < node.starConditions.length; si++) {
+            if (node.starConditions[si](runState)) stars = si + 1
+          }
+          recordCampaignNode(campaignNodeId, stars)
+        }
+      }
+      set({ phase: PHASE.VICTORY, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [] })
     } else {
-      // Auto-save at the start of each new plan phase
-      writeSave(SAVE_SLOTS.auto, fresh)
+      set({ phase: PHASE.PLAN, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [] })
+      writeSave(SAVE_SLOTS.auto, get())
     }
   },
 }))

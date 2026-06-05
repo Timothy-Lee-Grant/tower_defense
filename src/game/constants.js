@@ -55,19 +55,12 @@ export const TOOL_CATEGORY = {
 //  Outbound  →→  (0,6) col3↑ row2 col17↓ (17,6) →→ (19,6) TREASURE
 //  Return    →→  (19,6) ↓ row10 ←← (0,10) ↑ (0,6) ESCAPE
 
-const PATH_WAYPOINTS = [
-  { col: 0,  row: 6  },   // entrance / escape point
-  { col: 3,  row: 6  },
-  { col: 3,  row: 2  },
-  { col: 17, row: 2  },
-  { col: 17, row: 6  },
-  { col: 19, row: 6  },   // ★ TREASURE midpoint
-  { col: 19, row: 10 },
-  { col: 0,  row: 10 },
-  { col: 0,  row: 6  },   // escape (same tile as entrance)
-]
+// ── Path / Layout System ──────────────────────────────────────────────────
+// buildCenterline converts waypoints into a flat list of grid tiles (L-shaped
+// moves between each pair of waypoints).  The path is a closed loop — the
+// last waypoint equals the first (entrance = escape point).
 
-function buildCenterline(wps) {
+export function buildCenterline(wps) {
   const tiles = []
   for (let i = 0; i < wps.length - 1; i++) {
     const a = wps[i], b = wps[i + 1]
@@ -83,31 +76,319 @@ function buildCenterline(wps) {
   return tiles
 }
 
-export const PATH_TILES = buildCenterline(PATH_WAYPOINTS)
+// buildLayoutData: given a DUNGEON_LAYOUTS entry, compute all derived path sets.
+export function buildLayoutData(layout) {
+  const pathTiles  = buildCenterline(layout.waypoints)
+  const centerKeys = new Set(pathTiles.map(p => `${p.col},${p.row}`))
+  const rawExtra   = layout.extraTiles ?? []
+  const pathExtra  = rawExtra.filter(p => !centerKeys.has(`${p.col},${p.row}`))
+  const pathAll    = [...pathTiles, ...pathExtra]
+  return {
+    id:           layout.id,
+    pathTiles,
+    pathExtra,
+    pathAll,
+    pathSet:      new Set(pathAll.map(p => `${p.col},${p.row}`)),
+    pathCenterSet: centerKeys,
+    entrance:     layout.entrance,
+    treasure:     layout.treasure,
+  }
+}
 
-// Extra tiles that widen certain corridors visually (heroes don't walk here)
-const _extra = []
-for (let c = 4;  c <= 16; c++) _extra.push({ col: c, row: 1  })   // above top horizontal
-for (let c = 1;  c <= 18; c++) _extra.push({ col: c, row: 11 })   // below bottom horizontal
-for (let r = 7;  r <= 9;  r++) _extra.push({ col: 18, row: r })   // beside right corridor
-_extra.push(
-  { col: 1, row: 5 }, { col: 1, row: 7 },   // entrance flanks
-  { col: 0, row: 5 }, { col: 0, row: 7 },
-  { col: 4, row: 2 }, { col: 3, row: 3 },   // top-left plaza
-  { col: 16, row: 2 }, { col: 17, row: 3 }, // top-right plaza
-  { col: 18, row: 10 }, { col: 19, row: 9 },// bottom-right plaza
-  { col: 1,  row: 10 }, { col: 0,  row: 9 },// bottom-left plaza
-)
+// ── Dungeon Layouts ────────────────────────────────────────────────────────
+// Each layout defines:
+//   waypoints  — ordered list; first = entrance = escape; treasure position is
+//                a mid-path waypoint that matches `treasure` coords
+//   entrance   — { col, row } entry/exit tile
+//   treasure   — { col, row } gold chest position (must lie on the path)
+//   extraTiles — optional decorative path-adjacent tiles (non-walkable)
+export const DUNGEON_LAYOUTS = [
+  {
+    id:          'catacombs',
+    name:        'The Catacombs',
+    emoji:       '🏰',
+    description: 'A winding S-curve through the dungeon\'s oldest passages. The classic gauntlet.',
+    flavorText:  '"Gerald personally designed the original plumbing. He regrets it every day."',
+    waypoints: [
+      { col: 0,  row: 6  },
+      { col: 3,  row: 6  },
+      { col: 3,  row: 2  },
+      { col: 17, row: 2  },
+      { col: 17, row: 6  },
+      { col: 19, row: 6  },   // ★ TREASURE
+      { col: 19, row: 10 },
+      { col: 0,  row: 10 },
+      { col: 0,  row: 6  },   // escape
+    ],
+    entrance: { col: 0, row: 6 },
+    treasure: { col: 19, row: 6 },
+    extraTiles: [
+      // widen top corridor
+      ...Array.from({ length: 13 }, (_, i) => ({ col: i + 4, row: 1 })),
+      // widen bottom corridor
+      ...Array.from({ length: 18 }, (_, i) => ({ col: i + 1, row: 11 })),
+      // right corridor flanks
+      { col: 18, row: 7 }, { col: 18, row: 8 }, { col: 18, row: 9 },
+      // entrance flanks
+      { col: 1, row: 5 }, { col: 1, row: 7 }, { col: 0, row: 5 }, { col: 0, row: 7 },
+      // corner plazas
+      { col: 4, row: 2 }, { col: 3, row: 3 }, { col: 16, row: 2 }, { col: 17, row: 3 },
+      { col: 18, row: 10 }, { col: 19, row: 9 }, { col: 1, row: 10 }, { col: 0, row: 9 },
+    ],
+  },
 
-const _centerKeys = new Set(PATH_TILES.map(p => `${p.col},${p.row}`))
-export const PATH_EXTRA = _extra.filter(p => !_centerKeys.has(`${p.col},${p.row}`))
-export const PATH_ALL   = [...PATH_TILES, ...PATH_EXTRA]
+  {
+    id:          'gauntlet',
+    name:        'The Gauntlet',
+    emoji:       '⚔️',
+    description: 'Two parallel corridors — the top for the approach, the bottom for the escape. Towers near the center hit heroes twice.',
+    flavorText:  '"The architects called it efficiency. Heroes call it a nightmare." — Gerald',
+    waypoints: [
+      { col: 0,  row: 2  },   // entrance at top-left
+      { col: 19, row: 2  },   // across the top
+      { col: 19, row: 6  },   // ★ TREASURE at right edge
+      { col: 19, row: 10 },
+      { col: 0,  row: 10 },   // across the bottom
+      { col: 0,  row: 2  },   // escape (same as entrance)
+    ],
+    entrance: { col: 0, row: 2 },
+    treasure: { col: 19, row: 6 },
+    extraTiles: [
+      ...Array.from({ length: 20 }, (_, i) => ({ col: i, row: 1 })),
+      ...Array.from({ length: 20 }, (_, i) => ({ col: i, row: 11 })),
+      { col: 0, row: 3 }, { col: 0, row: 9 },
+      { col: 19, row: 7 }, { col: 19, row: 8 }, { col: 19, row: 9 },
+    ],
+  },
 
-export const PATH_SET        = new Set(PATH_ALL.map(p => `${p.col},${p.row}`))
-export const PATH_CENTER_SET = new Set(PATH_TILES.map(p => `${p.col},${p.row}`))
+  {
+    id:          'labyrinth',
+    name:        'The Labyrinth',
+    emoji:       '🌀',
+    description: 'Six sweeping zigzags across the full grid. A very long path — perfect for DoT, slow, and fire builds.',
+    flavorText:  '"We lost three torch-lighters mapping this one." — Gerald\'s safety report',
+    waypoints: [
+      { col: 0,  row: 6  },
+      { col: 0,  row: 1  },
+      { col: 7,  row: 1  },
+      { col: 7,  row: 5  },
+      { col: 14, row: 5  },
+      { col: 14, row: 1  },
+      { col: 19, row: 1  },
+      { col: 19, row: 6  },   // ★ TREASURE
+      { col: 19, row: 11 },
+      { col: 14, row: 11 },
+      { col: 14, row: 7  },
+      { col: 7,  row: 7  },
+      { col: 7,  row: 11 },
+      { col: 0,  row: 11 },
+      { col: 0,  row: 6  },   // escape
+    ],
+    entrance: { col: 0, row: 6 },
+    treasure: { col: 19, row: 6 },
+    extraTiles: [
+      // widen the horizontal runs
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i,      row: 0  })),
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i + 14, row: 0  })),
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i,      row: 12 })),
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i + 14, row: 12 })),
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i + 7,  row: 4  })),
+      ...Array.from({ length: 7  }, (_, i) => ({ col: i + 7,  row: 8  })),
+    ],
+  },
 
-export const ENTRANCE = { col: 0,  row: 6 }
-export const TREASURE = { col: 19, row: 6 }
+  {
+    id:          'throneroom',
+    name:        'The Throne Room',
+    emoji:       '👑',
+    description: 'Heroes spiral the outer walls before plunging to the treasure at the center. The return cuts straight through the middle.',
+    flavorText:  '"The throne is purely decorative. The treasure room is not." — Gerald',
+    waypoints: [
+      { col: 0,  row: 1  },   // entrance top-left
+      { col: 19, row: 1  },   // across the top
+      { col: 19, row: 11 },   // down the right
+      { col: 0,  row: 11 },   // across the bottom
+      { col: 0,  row: 7  },
+      { col: 4,  row: 7  },
+      { col: 4,  row: 6  },   // approach treasure horizontally — avoids row-5 re-entry
+      { col: 10, row: 6  },   // ★ TREASURE at center
+      { col: 10, row: 2  },
+      { col: 0,  row: 2  },
+      { col: 0,  row: 1  },   // escape
+    ],
+    entrance: { col: 0, row: 1 },
+    treasure: { col: 10, row: 6 },
+    extraTiles: [
+      ...Array.from({ length: 20 }, (_, i) => ({ col: i, row: 0  })),
+      ...Array.from({ length: 20 }, (_, i) => ({ col: i, row: 12 })),
+      { col: 0, row: 3 }, { col: 0, row: 4 }, { col: 0, row: 5 }, { col: 0, row: 6 },
+    ],
+  },
+
+  {
+    id:          'bottleneck',
+    name:        'The Bottleneck',
+    emoji:       '🔩',
+    description: 'Both legs of the journey converge on column 9 — defenses placed there attack heroes twice. Massive strategic weight on the chokepoint.',
+    flavorText:  '"Whoever built this was either a genius or deeply unwell." — Gerald',
+    waypoints: [
+      { col: 0,  row: 6  },
+      { col: 0,  row: 1  },
+      { col: 9,  row: 1  },
+      { col: 9,  row: 5  },
+      { col: 19, row: 5  },
+      { col: 19, row: 6  },   // ★ TREASURE
+      { col: 19, row: 7  },
+      { col: 9,  row: 7  },
+      { col: 9,  row: 11 },
+      { col: 0,  row: 11 },
+      { col: 0,  row: 6  },   // escape
+    ],
+    entrance: { col: 0, row: 6 },
+    treasure: { col: 19, row: 6 },
+    extraTiles: [
+      ...Array.from({ length: 9  }, (_, i) => ({ col: i, row: 0  })),
+      ...Array.from({ length: 10 }, (_, i) => ({ col: i + 9, row: 4 })),
+      ...Array.from({ length: 10 }, (_, i) => ({ col: i + 9, row: 8 })),
+      ...Array.from({ length: 9  }, (_, i) => ({ col: i, row: 12 })),
+      { col: 0, row: 5 }, { col: 0, row: 7 },
+      { col: 8, row: 1 }, { col: 8, row: 11 },
+    ],
+  },
+]
+
+// ── Campaign Modifiers ─────────────────────────────────────────────────────
+// id: used in gameStore and simulation as a key
+// label / desc: shown on campaign map
+export const CAMPAIGN_MODIFIERS = {
+  none: {
+    id: 'none', label: 'No Modifier', emoji: '—',
+    desc: 'Standard rules.',
+  },
+  lava_strong: {
+    id: 'lava_strong', label: 'Cursed Ground', emoji: '🌋',
+    desc: 'Lava deals 3× damage.',
+  },
+  thieves_disarm_all: {
+    id: 'thieves_disarm_all', label: 'Trained Thieves', emoji: '🗝️',
+    desc: 'Thieves can disarm any on-path trap, not just spikes.',
+  },
+  group_spawn: {
+    id: 'group_spawn', label: 'Coordinated Assault', emoji: '⚔️',
+    desc: 'Heroes spawn in tight groups — no stagger delay between them.',
+  },
+  boulder_regen: {
+    id: 'boulder_regen', label: 'Relentless Boulders', emoji: '🪨',
+    desc: 'Boulder traps respawn at the start of each wave.',
+  },
+  fire_double: {
+    id: 'fire_double', label: 'Volatile Atmosphere', emoji: '🔥',
+    desc: 'All fire-based towers and lava deal 2× damage.',
+  },
+  hero_speed: {
+    id: 'hero_speed', label: 'Caffeine Rush', emoji: '⚡',
+    desc: 'All heroes move 25% faster throughout the run.',
+  },
+}
+
+// ── Campaign Nodes ─────────────────────────────────────────────────────────
+// The campaign tree. Each node is a dungeon run with a fixed layout + modifier.
+// `requires` lists node IDs that must be completed (any star) to unlock this node.
+// `starConditions` — array of 3 check fns (1-star, 2-star, 3-star) evaluated
+//   against end-of-run state: { treasureHp, treasureMaxHp, waveIndex, runKills }
+export const CAMPAIGN_NODES = [
+  {
+    id:       'node_catacombs',
+    layoutId: 'catacombs',
+    modifier: 'none',
+    name:     'The Catacombs',
+    subtitle: 'Where every dungeon career begins.',
+    requires: [],
+    starConditions: [
+      s => s.waveIndex >= 15,                                          // 1 ★ — survived all waves
+      s => s.treasureHp / s.treasureMaxHp >= 0.5,                     // 2 ★ — treasure > 50% HP
+      s => s.treasureHp / s.treasureMaxHp >= 0.85 && s.runKills >= 80, // 3 ★ — nearly perfect
+    ],
+  },
+  {
+    id:       'node_gauntlet',
+    layoutId: 'gauntlet',
+    modifier: 'none',
+    name:     'The Gauntlet',
+    subtitle: 'Cover two corridors or die trying.',
+    requires: ['node_catacombs'],
+    starConditions: [
+      s => s.waveIndex >= 15,
+      s => s.treasureHp / s.treasureMaxHp >= 0.4,
+      s => s.treasureHp / s.treasureMaxHp >= 0.75,
+    ],
+  },
+  {
+    id:       'node_labyrinth',
+    layoutId: 'labyrinth',
+    modifier: 'none',
+    name:     'The Labyrinth',
+    subtitle: 'A long path favours poison and slow.',
+    requires: ['node_catacombs'],
+    starConditions: [
+      s => s.waveIndex >= 15,
+      s => s.treasureHp / s.treasureMaxHp >= 0.4,
+      s => s.treasureHp / s.treasureMaxHp >= 0.75,
+    ],
+  },
+  {
+    id:       'node_throneroom',
+    layoutId: 'throneroom',
+    modifier: 'lava_strong',
+    name:     'The Throne Room',
+    subtitle: 'Cursed ground — lava is lethal.',
+    requires: ['node_gauntlet'],
+    starConditions: [
+      s => s.waveIndex >= 15,
+      s => s.treasureHp / s.treasureMaxHp >= 0.35,
+      s => s.treasureHp / s.treasureMaxHp >= 0.65,
+    ],
+  },
+  {
+    id:       'node_bottleneck',
+    layoutId: 'bottleneck',
+    modifier: 'group_spawn',
+    name:     'The Bottleneck',
+    subtitle: 'Heroes rush in formation. Own the chokepoint.',
+    requires: ['node_labyrinth'],
+    starConditions: [
+      s => s.waveIndex >= 15,
+      s => s.treasureHp / s.treasureMaxHp >= 0.35,
+      s => s.treasureHp / s.treasureMaxHp >= 0.65,
+    ],
+  },
+  {
+    id:       'node_finale',
+    layoutId: 'catacombs',
+    modifier: 'hero_speed',
+    name:     'The Grand Finale',
+    subtitle: 'Fast heroes. Full roster. No mercy.',
+    requires: ['node_throneroom', 'node_bottleneck'],
+    starConditions: [
+      s => s.waveIndex >= 15,
+      s => s.treasureHp / s.treasureMaxHp >= 0.3,
+      s => s.treasureHp / s.treasureMaxHp >= 0.6 && s.runKills >= 100,
+    ],
+  },
+]
+
+// ── Legacy path exports (Catacombs layout) — kept for backwards compat ─────
+// All runtime code should prefer layoutData from the game store.
+const _catacombsLayout = DUNGEON_LAYOUTS[0]
+const _catacombsData   = buildLayoutData(_catacombsLayout)
+
+export const PATH_TILES      = _catacombsData.pathTiles
+export const PATH_EXTRA      = _catacombsData.pathExtra
+export const PATH_ALL        = _catacombsData.pathAll
+export const PATH_SET        = _catacombsData.pathSet
+export const PATH_CENTER_SET = _catacombsData.pathCenterSet
+export const ENTRANCE        = _catacombsLayout.entrance
+export const TREASURE        = _catacombsLayout.treasure
 
 // ── Tool Definitions ───────────────────────────────────────────────────────
 // placesOn: 'path'  → placed on walkable centerline only
