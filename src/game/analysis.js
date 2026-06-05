@@ -75,6 +75,14 @@ export function estimateSurvival(heroTypeId, grid) {
     } else if (tileId === TILE.LAVA) {
       // Hero spends ≈ 1/speed seconds crossing each tile
       damage += 15 * (1 / speed) * (1 - dr)
+    } else if (tileId === TILE.PIT && !hero.canDisarm) {
+      damage += 50 * 0.75 * (1 - dr)   // ~75% uptime average
+    } else if (tileId === TILE.PENDULUM) {
+      damage += 40 * 0.5 * (1 - dr)    // 50% swing phase
+    } else if (tileId === TILE.TAR && hero.immuneToSlow) {
+      damage += 15 * (1 / speed) * (1 - dr)   // Berserker tar burn
+    } else if (tileId === TILE.ELECTRIC) {
+      damage += 25 * (1 - dr)           // primary hit only
     }
   }
 
@@ -132,10 +140,12 @@ export function getImmunityWarnings(heroTypeId, grid) {
     warnings.push('slow-immune')
   if ((hero.fireResist ?? 1) <= 0.5 && tileSet.has(TILE.FIRE))
     warnings.push('fire-resist')
-  if (hero.canDisarm      && tileSet.has(TILE.SPIKE))
-    warnings.push('disarms spikes')
+  if (hero.canDisarm      && (tileSet.has(TILE.SPIKE) || tileSet.has(TILE.PIT)))
+    warnings.push('disarms traps')
   if (hero.boulderResist  && tileSet.has(TILE.BOULDER))
     warnings.push('destroys boulders')
+  if (hero.immuneToSlow   && tileSet.has(TILE.TAR))
+    warnings.push('tar immune (burns instead)')
 
   return warnings
 }

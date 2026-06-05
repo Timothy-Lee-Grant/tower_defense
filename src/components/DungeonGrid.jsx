@@ -22,6 +22,12 @@ const TILE_COLORS = {
   [TILE.WRAITH]:   { bg: '#100c18', border: '#1c1428' },
   [TILE.LAVA]:     { bg: '#200400', border: '#3a0800' },
   [TILE.ICE]:      { bg: '#08101e', border: '#10182e' },
+  // New traps (7.1)
+  [TILE.PIT]:      { bg: '#1a1008', border: '#2e2010' },
+  [TILE.PENDULUM]: { bg: '#14101e', border: '#222038' },
+  [TILE.TAR]:      { bg: '#180e04', border: '#281604' },
+  [TILE.ELECTRIC]: { bg: '#0a0818', border: '#141228' },
+  [TILE.STASIS]:   { bg: '#060e18', border: '#0c1828' },
 }
 
 // Tower type → particle preset mapping
@@ -305,7 +311,19 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         const y = row * TILE_SIZE
         ctx.save()
         ctx.beginPath(); ctx.rect(x, y, TILE_SIZE, TILE_SIZE); ctx.clip()
-        drawFn(ctx, x, y, t)
+
+        // State-dependent sprites: pit (armed?) and pendulum (swinging?)
+        if (tileId === TILE.PIT) {
+          const pitKey  = `pit_${col},${row}`
+          const isArmed = !(currentTimers[pitKey] > 0)
+          drawFn(ctx, x, y, t, { armed: isArmed })
+        } else if (tileId === TILE.PENDULUM) {
+          const pendKey  = `pendulum_${col},${row}`
+          const phase    = currentTimers[pendKey] ?? 0
+          drawFn(ctx, x, y, t, { swinging: (phase % 4000) < 2000 })
+        } else {
+          drawFn(ctx, x, y, t)
+        }
         ctx.restore()
       }
     }
@@ -589,6 +607,18 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         ctx.fillStyle = `rgba(200,80,255,${runeAlpha * 0.6})`
         ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill()
         ctx.restore()
+      }
+
+      // Stasis — blue crystalline overlay when frozen
+      if ((hero.stasisTimer ?? 0) > 0) {
+        const stasisAlpha = Math.min(0.7, hero.stasisTimer / 500)
+        ctx.fillStyle = `rgba(80,160,240,${stasisAlpha * 0.55})`
+        ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = `rgba(180,230,255,${stasisAlpha * 0.9})`
+        ctx.lineWidth   = 2
+        ctx.setLineDash([4, 2])
+        ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI * 2); ctx.stroke()
+        ctx.setLineDash([])
       }
 
       // HP bar

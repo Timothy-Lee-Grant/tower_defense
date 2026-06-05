@@ -2355,4 +2355,340 @@ export const TILE_SPRITES = {
   poison:   drawPoison,
   lava:     drawLava,
   ice:      drawIce,
+  // New traps (7.1)
+  pit:      drawPitTrap,
+  pendulum: drawPendulumTrap,
+  tar:      drawTarPit,
+  electric: drawElectricFloor,
+  stasis:   drawStasisField,
+}
+
+// ── New On-Path Trap Sprites (7.1) ────────────────────────────────────────────
+// All accept an optional 5th `state` parameter for phase-dependent rendering:
+//   pit:      state.armed  (false = cooldown lid drawn)
+//   pendulum: state.swinging (true = blade in danger zone)
+//   others:   no state needed
+
+// Pit Trap — dark hole with spike tips; wooden lid when recovering
+export function drawPitTrap(ctx, tx, ty, t, state = {}) {
+  const cx    = tx + TS / 2
+  const cy    = ty + TS / 2
+  const armed = state.armed !== false  // default to armed visually if no state given
+
+  // Floor around hole
+  ctx.fillStyle = '#2a1a0a'
+  ctx.fillRect(tx + 1, ty + 1, TS - 2, TS - 2)
+
+  if (!armed) {
+    // Recovering: wooden planks covering the hole
+    ctx.fillStyle = '#4a3018'
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(tx + 3, ty + 5 + i * 13, TS - 6, 10)
+      ctx.fillStyle = '#3a2410'
+      ctx.fillRect(tx + 3, ty + 5 + i * 13, TS - 6, 1)
+      ctx.fillStyle = '#4a3018'
+    }
+    // Crack hint showing it'll reopen
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    for (let i = 0; i < 3; i++) {
+      ctx.moveTo(tx + 3, ty + 15 + i * 13)
+      ctx.lineTo(tx + TS - 3, ty + 15 + i * 13)
+    }
+    ctx.stroke()
+    return
+  }
+
+  // Armed: deep hole with spikes
+  // Hole shadow
+  ctx.fillStyle = '#0a0600'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy + 2, 16, 12, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Pit edge — rough stone
+  ctx.strokeStyle = '#4a3018'
+  ctx.lineWidth   = 3
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, 17, 13, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Spike tips (visible from above)
+  const nSpikes = 5
+  ctx.fillStyle = '#888898'
+  for (let i = 0; i < nSpikes; i++) {
+    const a = (i / nSpikes) * Math.PI * 2 + t * 0.0005  // very slow rotation
+    const sx = cx + Math.cos(a) * 9
+    const sy = cy + Math.sin(a) * 6
+    ctx.beginPath()
+    ctx.moveTo(sx, sy - 5)
+    ctx.lineTo(sx - 2, sy + 3)
+    ctx.lineTo(sx + 2, sy + 3)
+    ctx.closePath()
+    ctx.fill()
+  }
+  // Blood at bottom
+  ctx.fillStyle = 'rgba(180,10,10,0.5)'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy + 4, 8, 5, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+
+// Pendulum Trap — wall-mounted swinging blade
+export function drawPendulumTrap(ctx, tx, ty, t, state = {}) {
+  const cx       = tx + TS / 2
+  const swinging = state.swinging ?? false
+
+  // Stone wall base
+  ctx.fillStyle = '#1e1828'
+  ctx.fillRect(tx + 1, ty + 1, TS - 2, TS - 2)
+  ctx.fillStyle = '#2a2238'
+  ctx.fillRect(tx + 3, ty + 3, TS - 6, TS - 6)
+  // Wall texture blocks
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      const bx = tx + 4 + col * 19
+      const by = ty + 4 + row * 13
+      ctx.strokeStyle = '#14101e'
+      ctx.lineWidth = 0.5
+      ctx.strokeRect(bx, by, 17, 11)
+    }
+  }
+
+  // Pivot pin at top center
+  ctx.fillStyle = '#c0b080'
+  ctx.beginPath()
+  ctx.arc(cx, ty + 8, 4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#808070'
+  ctx.beginPath()
+  ctx.arc(cx, ty + 8, 2, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Pendulum swing angle
+  // Rest position: ±60° from vertical; swinging: oscillate rapidly
+  let angle
+  if (swinging) {
+    // Rapid back-and-forth in swing zone
+    angle = Math.sin(t * 0.008) * 0.8   // ±46° when active
+  } else {
+    // Resting at side
+    angle = Math.PI / 3   // 60° — parked to one side
+  }
+
+  const armLen = TS - 14
+  const bladeX = cx + Math.sin(angle) * armLen
+  const bladeY = ty + 8 + Math.cos(angle) * armLen
+
+  // Chain / arm
+  ctx.strokeStyle = swinging ? '#d0a020' : '#6a6080'
+  ctx.lineWidth   = 2.5
+  ctx.beginPath()
+  ctx.moveTo(cx, ty + 8)
+  ctx.lineTo(bladeX, bladeY)
+  ctx.stroke()
+
+  // Blade
+  ctx.save()
+  ctx.translate(bladeX, bladeY)
+  ctx.rotate(angle)
+  ctx.fillStyle = swinging ? '#e0e8f0' : '#7a7888'
+  ctx.fillRect(-6, -3, 12, 6)
+  if (swinging) {
+    ctx.fillStyle = 'rgba(220,200,255,0.6)'
+    ctx.fillRect(-6, -3, 2, 6)   // gleam edge
+  }
+  ctx.restore()
+
+  // Active glow
+  if (swinging) {
+    ctx.strokeStyle = 'rgba(200,180,40,0.25)'
+    ctx.lineWidth   = 6
+    ctx.beginPath()
+    ctx.moveTo(cx, ty + 8)
+    ctx.lineTo(bladeX, bladeY)
+    ctx.stroke()
+  }
+}
+
+
+// Tar Pit — thick dark amber gloop, slowly bubbling
+export function drawTarPit(ctx, tx, ty, t) {
+  const cx = tx + TS / 2
+  const cy = ty + TS / 2
+
+  // Dark tar base
+  ctx.fillStyle = '#100800'
+  ctx.fillRect(tx + 1, ty + 1, TS - 2, TS - 2)
+
+  // Tar pool — slightly lighter in center
+  ctx.fillStyle = '#1e1004'
+  ctx.fillRect(tx + 3, ty + 3, TS - 6, TS - 6)
+  ctx.fillStyle = '#281408'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy + 2, 16, 12, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Surface sheen
+  ctx.fillStyle = 'rgba(80,50,10,0.35)'
+  ctx.beginPath()
+  ctx.ellipse(cx - 3, cy - 2, 9, 6, -0.3, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Tar drip edges
+  ctx.fillStyle = '#1a0c04'
+  for (let i = 0; i < 4; i++) {
+    const a  = (i / 4) * Math.PI * 2 + t * 0.0004
+    const bx = cx + Math.cos(a) * 17
+    const by = cy + Math.sin(a) * 14
+    ctx.beginPath()
+    ctx.ellipse(bx, by, 3, 4, a, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Slow bubbles
+  for (let i = 0; i < 3; i++) {
+    const bPhase = (t * 0.0015 + i * 2.1) % (Math.PI * 2)
+    const bAlpha = Math.sin(bPhase)
+    if (bAlpha < 0) continue
+    const bx = cx + Math.cos(i * 2.09) * 8
+    const by = cy + Math.sin(i * 2.09) * 5
+    const br = 2 + bAlpha * 2
+    ctx.fillStyle = `rgba(60,35,10,${bAlpha * 0.7})`
+    ctx.beginPath()
+    ctx.arc(bx, by - bAlpha * 3, br, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // "TAR" subtle label hint
+  ctx.font    = '7px monospace'
+  ctx.fillStyle = 'rgba(80,50,20,0.5)'
+  ctx.textAlign    = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('TAR', cx, cy + 8)
+}
+
+
+// Electric Floor — charged metal grate with arcing electricity
+export function drawElectricFloor(ctx, tx, ty, t) {
+  const cx = tx + TS / 2
+  const cy = ty + TS / 2
+
+  // Dark metal base
+  ctx.fillStyle = '#080818'
+  ctx.fillRect(tx + 1, ty + 1, TS - 2, TS - 2)
+
+  // Metal grate pattern
+  ctx.strokeStyle = '#1e1e3a'
+  ctx.lineWidth = 1
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath()
+    ctx.moveTo(tx + 3, ty + 7 + i * 8)
+    ctx.lineTo(tx + TS - 3, ty + 7 + i * 8)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(tx + 7 + i * 8, ty + 3)
+    ctx.lineTo(tx + 7 + i * 8, ty + TS - 3)
+    ctx.stroke()
+  }
+
+  // Warning chevrons at corners
+  ctx.fillStyle = '#2a2a08'
+  const corners = [[tx+3,ty+3],[tx+TS-9,ty+3],[tx+3,ty+TS-9],[tx+TS-9,ty+TS-9]]
+  for (const [bx,by] of corners) {
+    ctx.fillRect(bx, by, 6, 6)
+    ctx.fillStyle = '#4a4a10'
+    ctx.fillRect(bx+1, by+1, 4, 4)
+    ctx.fillStyle = '#2a2a08'
+  }
+
+  // Arcing electricity
+  const arcCount = 3
+  for (let i = 0; i < arcCount; i++) {
+    const phase  = (t * 0.005 + i * 1.3) % (Math.PI * 2)
+    const alpha  = (Math.sin(phase) + 1) / 2
+    if (alpha < 0.3) continue
+
+    const x1 = tx + 8 + i * 12
+    const y1 = ty + 4
+    const x2 = tx + 14 + i * 10
+    const y2 = ty + TS - 5
+    const mx  = (x1 + x2) / 2 + (Math.random() - 0.5) * 12
+    const my  = (y1 + y2) / 2 + (Math.random() - 0.5) * 8
+
+    ctx.strokeStyle = `rgba(80,120,255,${alpha * 0.9})`
+    ctx.lineWidth   = 1.5
+    ctx.shadowColor = 'rgba(100,150,255,0.8)'
+    ctx.shadowBlur  = 4
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.quadraticCurveTo(mx, my, x2, y2)
+    ctx.stroke()
+    ctx.shadowBlur = 0
+  }
+
+  // Center glow
+  const glowPulse = 0.15 + 0.12 * Math.sin(t * 0.007)
+  ctx.fillStyle = `rgba(60,80,220,${glowPulse})`
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, 12, 10, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+
+// Stasis Field — blue crystalline hexagonal floor
+export function drawStasisField(ctx, tx, ty, t) {
+  const cx  = tx + TS / 2
+  const cy  = ty + TS / 2
+  const glo = 0.35 + 0.2 * Math.sin(t * 0.004)
+
+  // Dark ice-blue base
+  ctx.fillStyle = '#060e18'
+  ctx.fillRect(tx + 1, ty + 1, TS - 2, TS - 2)
+
+  // Hex crystal pattern
+  ctx.strokeStyle = `rgba(100,180,240,${glo * 0.6})`
+  ctx.lineWidth   = 0.8
+  const hexR = 14
+  ctx.beginPath()
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + t * 0.0005
+    i === 0
+      ? ctx.moveTo(cx + hexR * Math.cos(a), cy + hexR * Math.sin(a))
+      : ctx.lineTo(cx + hexR * Math.cos(a), cy + hexR * Math.sin(a))
+  }
+  ctx.closePath()
+  ctx.stroke()
+  // Spokes
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + t * 0.0005
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(cx + hexR * Math.cos(a), cy + hexR * Math.sin(a))
+    ctx.stroke()
+  }
+
+  // Inner glow
+  ctx.fillStyle = `rgba(80,160,220,${glo * 0.18})`
+  ctx.beginPath()
+  ctx.arc(cx, cy, 10, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Frost sparkles
+  for (let i = 0; i < 4; i++) {
+    const sa = (i / 4) * Math.PI * 2 + t * 0.002
+    const sr = 8 + Math.sin(t * 0.006 + i) * 3
+    const sx = cx + Math.cos(sa) * sr
+    const sy = cy + Math.sin(sa) * sr
+    ctx.fillStyle = `rgba(200,230,255,${glo * 0.9})`
+    ctx.fillRect(sx - 1, sy - 1, 2, 2)
+  }
+
+  // Center crystal dot
+  ctx.fillStyle = `rgba(200,240,255,${glo})`
+  ctx.beginPath()
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+  ctx.fill()
 }

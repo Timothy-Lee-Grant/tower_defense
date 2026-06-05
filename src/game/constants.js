@@ -13,7 +13,13 @@ export const TILE = {
   SPIKE:    'spike',
   BOULDER:  'boulder',
   DOOR:     'door',
-  LAVA:     'lava',     // NEW: persistent DoT while traversing
+  LAVA:     'lava',     // persistent DoT while traversing
+  // New on-path traps (7.1)
+  PIT:      'pit',       // 50 dmg + 3s slow on step; resets after 8 s
+  PENDULUM: 'pendulum',  // 40 dmg only during swing phase (2 s on / 2 s off)
+  TAR:      'tar',       // 0.25× speed; Berserkers immune but take 15 HP/s
+  ELECTRIC: 'electric',  // 25 dmg + 15 chain to nearest hero within 2 tiles
+  STASIS:   'stasis',    // freeze 2 s — immune to damage, but towers reload free
   // Off-path towers/monsters (ranged attacks beside path)
   DART:     'dart',
   FIRE:     'fire',
@@ -136,6 +142,41 @@ export const DUNGEON_TOOLS = [
     placesOn: 'path',
     description: 'On-path. Deals 15 HP/s while any hero stands on it. Hits inbound AND outbound.',
     color: '#c4430a', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.PIT, category: TOOL_CATEGORY.TRAPS,
+    label: 'Pit Trap', emoji: '🕳️', cost: 45, damage: 50,
+    placesOn: 'path',
+    description: 'On-path. 50 damage + 3 s slow. Resets after 8 s — not one-use. Warlords disarm it.',
+    color: '#1a1008', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.PENDULUM, category: TOOL_CATEGORY.TRAPS,
+    label: 'Pendulum', emoji: '⚙️', cost: 55, damage: 40,
+    placesOn: 'path',
+    description: 'On-path. 40 damage only during the swing phase (2 s on / 2 s off). Staggered timing per tile.',
+    color: '#222233', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.TAR, category: TOOL_CATEGORY.TRAPS,
+    label: 'Tar Pit', emoji: '🟤', cost: 50, damage: 0,
+    placesOn: 'path',
+    description: 'On-path. Slows to 25% speed. Berserkers are immune to slows — but tar burns them for 15 HP/s instead.',
+    color: '#180e04', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.ELECTRIC, category: TOOL_CATEGORY.TRAPS,
+    label: 'Electric Floor', emoji: '⚡', cost: 80, damage: 25,
+    placesOn: 'path',
+    description: 'On-path. 25 damage on step + chains 15 damage to nearest hero within 2 tiles. Punishes grouped parties.',
+    color: '#0a0a22', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.STASIS, category: TOOL_CATEGORY.TRAPS,
+    label: 'Stasis Field', emoji: '🔷', cost: 90, damage: 0,
+    placesOn: 'path',
+    description: 'On-path. Freezes hero for 2 s — immune to all damage while frozen, but every tower in range reloads freely.',
+    color: '#060e18', unlocked: false, tier: 3,
   },
 
   // ── Off-path towers ─────────────────────────────────────────────────────

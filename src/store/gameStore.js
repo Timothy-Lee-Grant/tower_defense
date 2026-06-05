@@ -157,8 +157,9 @@ export const useGameStore = create((set, get) => ({
     const def = DUNGEON_TOOLS.find(t => t.id === selectedTool)
     if (!def || gold < def.cost) return
 
-    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) ||
-      [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA].includes(cur)
+    const ON_PATH_TRAPS = [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA,
+                           TILE.PIT, TILE.PENDULUM, TILE.TAR, TILE.ELECTRIC, TILE.STASIS]
+    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
     const anyPath = PATH_SET.has(`${col},${row}`)
 
     if (def.placesOn === 'path' && !onCenterline) return
@@ -185,8 +186,9 @@ export const useGameStore = create((set, get) => ({
     const cost = Math.ceil(def.cost * BANK_COST_MULT)
     if (bank < cost) return
 
-    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) ||
-      [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA].includes(cur)
+    const ON_PATH_TRAPS = [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA,
+                           TILE.PIT, TILE.PENDULUM, TILE.TAR, TILE.ELECTRIC, TILE.STASIS]
+    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) || ON_PATH_TRAPS.includes(cur)
     const anyPath = PATH_SET.has(`${col},${row}`)
 
     if (def.placesOn === 'path' && !onCenterline) return
@@ -314,8 +316,13 @@ export const useGameStore = create((set, get) => ({
         if (ev.type === 'hero_escaped')     return ev.hadGold
           ? `🏃 ${ev.label} escaped WITH the gold!`
           : `💨 ${ev.label} fled empty-handed.`
-        if (ev.type === 'trap_triggered')   return `⚡ ${ev.label} hit a ${ev.trap}`
-        if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a spike`
+        if (ev.type === 'trap_triggered') {
+          const trapNames = { spike: 'spike plate', boulder: 'rolling boulder', pit: 'pit trap',
+            pendulum: 'pendulum', electric: 'electric floor', stasis: 'stasis field' }
+          return `⚡ ${ev.label} hit a ${trapNames[ev.trap] ?? ev.trap}`
+        }
+        if (ev.type === 'electric_chain')   return `⚡ Chain arc hit ${ev.label}!`
+        if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a trap`
         if (ev.type === 'curse_applied')    return ev.stacks === 3
           ? `👁️ ${ev.label} fully cursed — all damage +45%!`
           : `👁️ ${ev.label} cursed (stack ${ev.stacks}/3)`

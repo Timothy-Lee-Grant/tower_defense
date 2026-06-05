@@ -40,6 +40,7 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
     speed:          heroType.speed,
     canDisarm:      heroType.canDisarm,
     heals:          heroType.heals,
+    stasisTimer:    0,   // > 0 = frozen; immune to damage, can't move
     fireResist:     heroType.fireResist ?? 1,
     goldSpeedMult:  heroType.goldSpeedMult ?? 1,
     // Pixel/grid position — starts at entrance (PATH_TILES[0])
@@ -92,6 +93,13 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       hero = { ...hero, spawned: true, spawnDelay: 0 }
     }
 
+    // ── Stasis: frozen hero — immune to damage, can't move ──────────────────
+    if (hero.stasisTimer > 0) {
+      hero = { ...hero, stasisTimer: Math.max(0, hero.stasisTimer - deltaMs) }
+      updatedHeroes.push(hero)
+      continue
+    }
+
     // ── Status effects ──
 
     // Slow timer countdown
@@ -108,12 +116,17 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       hero = { ...hero, hp: hero.hp - dmg }
     }
 
-    // Lava DoT — 15 HP/s while standing on a LAVA tile
+    // Tile DoT: lava (15 HP/s) and tar (15 HP/s Berserker-only)
     const curTileId = grid[hero.row]?.[hero.col]
     if (curTileId === TILE.LAVA) {
       const dmg = 15 * (deltaMs / 1000) * (1 - hero.damageReduction)
       hero = { ...hero, hp: hero.hp - dmg }
       events.push({ type: 'lava_damage', heroId: hero.id })
+    }
+    if (curTileId === TILE.TAR && hero.immuneToSlow) {
+      // Berserkers can't be slowed by tar, but it burns them
+      const dmg = 15 * (deltaMs / 1000) * (1 - hero.damageReduction)
+      hero = { ...hero, hp: hero.hp - dmg }
     }
 
     // Self-regen (mage, archmage)
@@ -160,11 +173,13 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
     const dist    = Math.sqrt(dx * dx + dy * dy)
 
     // Speed modifiers stack multiplicatively
-    const doorSlow   = curTileId === TILE.DOOR
+    const doorSlow = curTileId === TILE.DOOR
       ? (DUNGEON_TOOLS.find(t => t.id === TILE.DOOR)?.slow ?? 1) : 1
-    const goldMult   = hero.hasGold ? hero.goldSpeedMult : 1
-    const slowMult   = hero.slowed  ? 0.5 : 1
-    const moveSpeed  = hero.speed * TILE_SIZE * (deltaMs / 1000) * doorSlow * goldMult * slowMult
+    // Tar: 0.25× speed for non-Berserkers (Berserkers immune to slow, take DoT instead)
+    const tarSlow  = (curTileId === TILE.TAR && !hero.immuneToSlow) ? 0.25 : 1
+    const goldMult = hero.hasGold ? hero.goldSpeedMult : 1
+    const slowMult = hero.slowed  ? 0.5 : 1
+    const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000) * doorSlow * tarSlow * goldMult * slowMult
 
     if (dist <= moveSpeed) {
       // Arrived at next path tile
@@ -190,9 +205,10 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         arrivedId !== TILE.PATH     &&
         arrivedId !== TILE.ENTRANCE &&
         arrivedId !== TILE.TREASURE &&
-        arrivedId !== TILE.DOOR
+        arrivedId !== TILE.DOOR     &&
+        arrivedId !== TILE.TAR        // tar is handled as continuous DoT above
       ) {
-        const result = handleOnPathTrap(hero, arrivedId, nextTile, events)
+        const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers)
         hero = result.hero
       }
 
@@ -241,6 +257,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       // ── Target selection ────────────────────────────────────────────
       const inRange = updatedHeroes.filter(h =>
         h.spawned && h.state === 'moving' &&
+        (h.stasisTimer ?? 0) <= 0 &&          // frozen heroes are immune to tower attacks
         Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2) <= toolDef.range
       )
       if (inRange.length === 0) continue
@@ -333,14 +350,36 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
     }
   }
 
+  // ── Pit + Pendulum per-tile timer maintenance ──────────────────────────────
+  // Runs over the whole grid once per tick regardless of hero positions.
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (grid[r][c] === TILE.PIT) {
+        // Count DOWN cooldown; 0 = armed and ready to trigger
+        const key = `pit_${c},${r}`
+        if (updatedTimers[key] > 0)
+          updatedTimers[key] = Math.max(0, updatedTimers[key] - deltaMs)
+      } else if (grid[r][c] === TILE.PENDULUM) {
+        // Cycle 0 – 3999 ms; stagger initial phase by tile position
+        const key = `pendulum_${c},${r}`
+        const seed = (c * 37 + r * 13) % 4000
+        updatedTimers[key] = ((updatedTimers[key] ?? seed) + deltaMs) % 4000
+      }
+    }
+  }
+
   return { heroes: updatedHeroes, events, treasureDamage, goldEarned, trapTimers: updatedTimers }
 }
 
 // ── On-path trap interactions ──────────────────────────────────────────────
-function handleOnPathTrap(hero, tileId, tilePos, events) {
+// updatedHeroes: mutable array of heroes processed so far this tick (for electric chain)
+// updatedTimers: mutable timer map (for pit cooldown writes)
+function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], updatedTimers = {}) {
   const trapKey = `${tilePos.col},${tilePos.row}`
 
   switch (tileId) {
+
+    // ── Existing traps ───────────────────────────────────────────────────────
     case TILE.SPIKE: {
       if (hero.canDisarm) {
         events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
@@ -351,7 +390,6 @@ function handleOnPathTrap(hero, tileId, tilePos, events) {
       return { hero: { ...hero, hp: hero.hp - spikeDmg } }
     }
     case TILE.BOULDER: {
-      // Warlord: destroys boulders without damage
       if (hero.boulderResist) {
         events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
         return { hero }
@@ -360,7 +398,73 @@ function handleOnPathTrap(hero, tileId, tilePos, events) {
       events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
       return { hero: { ...hero, hp: hero.hp - boulderDmg } }
     }
-    // LAVA damage is handled per-tick above, not on arrival
+    // LAVA + TAR handled as continuous DoT in Pass 1, not on arrival
+
+    // ── New traps (7.1) ──────────────────────────────────────────────────────
+
+    case TILE.PIT: {
+      if (hero.canDisarm) {
+        // Warlord/Thief disarm pits (reset cooldown)
+        updatedTimers[`pit_${tilePos.col},${tilePos.row}`] = 0
+        events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
+        return { hero }
+      }
+      const pitKey   = `pit_${tilePos.col},${tilePos.row}`
+      const isArmed  = !(updatedTimers[pitKey] > 0)
+      if (!isArmed) return { hero }  // still on cooldown
+      const pitDmg = Math.round(50 * (1 - hero.damageReduction))
+      updatedTimers[pitKey] = 8000   // start 8 s reset cooldown
+      events.push({ type: 'trap_triggered', trapKey, trap: 'pit', label: hero.label })
+      return {
+        hero: {
+          ...hero,
+          hp:       hero.hp - pitDmg,
+          slowed:   hero.immuneToSlow ? hero.slowed : true,
+          slowTimer: hero.immuneToSlow ? hero.slowTimer : Math.max(hero.slowTimer, 3000),
+        },
+      }
+    }
+
+    case TILE.PENDULUM: {
+      const pendKey   = `pendulum_${tilePos.col},${tilePos.row}`
+      const phase     = updatedTimers[pendKey] ?? 0
+      const swinging  = (phase % 4000) < 2000
+      if (!swinging) return { hero }  // pendulum at rest — safe to pass
+      const pendDmg = Math.round(40 * (1 - hero.damageReduction))
+      events.push({ type: 'trap_triggered', trapKey, trap: 'pendulum', label: hero.label })
+      return { hero: { ...hero, hp: hero.hp - pendDmg } }
+    }
+
+    case TILE.ELECTRIC: {
+      const elecDmg = Math.round(25 * (1 - hero.damageReduction))
+      events.push({ type: 'trap_triggered', trapKey, trap: 'electric', label: hero.label })
+
+      // Chain to nearest other living hero within 2 tiles (uses already-processed heroes)
+      const chainTarget = updatedHeroes
+        .filter(h => h.id !== hero.id && h.state === 'moving' && h.spawned && (h.stasisTimer ?? 0) <= 0)
+        .sort((a, b) => {
+          const da = (a.col - tilePos.col) ** 2 + (a.row - tilePos.row) ** 2
+          const db = (b.col - tilePos.col) ** 2 + (b.row - tilePos.row) ** 2
+          return da - db
+        })
+        .find(h => Math.sqrt((h.col - tilePos.col) ** 2 + (h.row - tilePos.row) ** 2) <= 2)
+
+      if (chainTarget) {
+        const idx      = updatedHeroes.indexOf(chainTarget)
+        const chainDmg = Math.round(15 * (1 - chainTarget.damageReduction))
+        updatedHeroes[idx] = { ...chainTarget, hp: chainTarget.hp - chainDmg }
+        events.push({ type: 'electric_chain', trapKey, label: chainTarget.label, damage: chainDmg })
+      }
+
+      return { hero: { ...hero, hp: hero.hp - elecDmg } }
+    }
+
+    case TILE.STASIS: {
+      if ((hero.stasisTimer ?? 0) > 0) return { hero }  // already frozen
+      events.push({ type: 'trap_triggered', trapKey, trap: 'stasis', label: hero.label })
+      return { hero: { ...hero, stasisTimer: 2000 } }   // 2 s freeze
+    }
+
     default:
       return { hero }
   }
