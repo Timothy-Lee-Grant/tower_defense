@@ -322,6 +322,7 @@ export const useGameStore = create((set, get) => ({
           return `⚡ ${ev.label} hit a ${trapNames[ev.trap] ?? ev.trap}`
         }
         if (ev.type === 'electric_chain')   return `⚡ Chain arc hit ${ev.label}!`
+        if (ev.type === 'mimic_triggered')  return `📦 ${ev.label} stopped to investigate the chest.`
         if (ev.type === 'trap_disarmed')    return `🔓 ${ev.label} disarmed a trap`
         if (ev.type === 'curse_applied')    return ev.stacks === 3
           ? `👁️ ${ev.label} fully cursed — all damage +45%!`

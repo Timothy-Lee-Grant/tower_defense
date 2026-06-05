@@ -40,7 +40,9 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
     speed:          heroType.speed,
     canDisarm:      heroType.canDisarm,
     heals:          heroType.heals,
-    stasisTimer:    0,   // > 0 = frozen; immune to damage, can't move
+    stasisTimer:      0,   // > 0 = frozen; immune to damage, can't move
+    distractedTimer:  0,   // > 0 = stopped by Mimic; can still take damage
+    distractedByMimics: [], // trapKeys of mimics already used on this hero (immune after 1st)
     fireResist:     heroType.fireResist ?? 1,
     goldSpeedMult:  heroType.goldSpeedMult ?? 1,
     // Pixel/grid position — starts at entrance (PATH_TILES[0])
@@ -155,6 +157,13 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       }
     }
 
+    // ── Mimic distraction: hero stops but can still take damage ─────────────
+    if (hero.distractedTimer > 0) {
+      hero = { ...hero, distractedTimer: Math.max(0, hero.distractedTimer - deltaMs) }
+      updatedHeroes.push(hero)
+      continue
+    }
+
     // ── Movement ──
 
     const nextTile = PATH_TILES[hero.pathIndex + 1]
@@ -247,38 +256,43 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
   for (let r = 0; r < grid.length; r++) {
     for (let c = 0; c < grid[r].length; c++) {
       const tileId  = grid[r][c]
-      const toolDef = DUNGEON_TOOLS.find(t => t.id === tileId && t.range)
+      // Require attackSpeed to exclude Mimic (handled in its own loop below)
+      const toolDef = DUNGEON_TOOLS.find(t => t.id === tileId && t.range && t.attackSpeed)
       if (!toolDef) continue
 
       const key = `tower_${c},${r}`
       updatedTimers[key] = (updatedTimers[key] ?? toolDef.attackSpeed) + deltaMs
-      if (updatedTimers[key] < toolDef.attackSpeed) continue
 
-      // ── Target selection ────────────────────────────────────────────
+      // Gather heroes in range first (needed for distraction speed-boost check)
       const inRange = updatedHeroes.filter(h =>
         h.spawned && h.state === 'moving' &&
-        (h.stasisTimer ?? 0) <= 0 &&          // frozen heroes are immune to tower attacks
+        (h.stasisTimer ?? 0) <= 0 &&
         Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2) <= toolDef.range
       )
       if (inRange.length === 0) continue
 
+      // Mimic distraction doubles fire rate for this tower
+      const hasDistracted  = inRange.some(h => (h.distractedTimer ?? 0) > 0)
+      const fireThreshold  = hasDistracted ? toolDef.attackSpeed * 0.5 : toolDef.attackSpeed
+      if (updatedTimers[key] < fireThreshold) continue
+
+      // ── Target selection ────────────────────────────────────────────
       const closest = pool => pool.reduce((a, b) =>
         Math.sqrt((a.col-c)**2+(a.row-r)**2) <= Math.sqrt((b.col-c)**2+(b.row-r)**2) ? a : b
       )
 
       let targets
       if (toolDef.aoeAttack) {
-        // Cave Troll: hit every hero in range at once
         targets = inRange
+      } else if (toolDef.randomTarget) {
+        // Catapult: hits a random hero in range
+        targets = [inRange[Math.floor(Math.random() * inRange.length)]]
       } else if (toolDef.targetGoldCarriers) {
-        // Shadow Stalker: gold-carriers first, else closest
         const carriers = inRange.filter(h => h.hasGold)
         targets = [closest(carriers.length > 0 ? carriers : inRange)]
       } else if (toolDef.targetFarthest) {
-        // Gargoyle: most advanced hero (highest pathIndex)
         targets = [inRange.reduce((a, b) => a.pathIndex >= b.pathIndex ? a : b)]
       } else {
-        // Default: closest hero
         targets = [closest(inRange)]
       }
 
@@ -346,6 +360,34 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
           fromY: r * TILE_SIZE + TILE_SIZE / 2,
           toX: target.x, toY: target.y,
         })
+      }
+    }
+  }
+
+  // ── Mimic Chest proximity distraction ────────────────────────────────────
+  // Scanned after towers so distracted heroes are already frozen this tick.
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (grid[r][c] !== TILE.MIMIC) continue
+      const mimicKey  = `${c},${r}`
+      const mimicRange = 2
+
+      for (let i = 0; i < updatedHeroes.length; i++) {
+        const h = updatedHeroes[i]
+        if (!h.spawned || h.state !== 'moving') continue
+        if ((h.stasisTimer    ?? 0) > 0) continue   // already frozen
+        if ((h.distractedTimer ?? 0) > 0) continue  // already distracted
+        if ((h.distractedByMimics ?? []).includes(mimicKey)) continue  // immune
+
+        const dist = Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2)
+        if (dist > mimicRange) continue
+
+        updatedHeroes[i] = {
+          ...h,
+          distractedTimer:    1500,
+          distractedByMimics: [...(h.distractedByMimics ?? []), mimicKey],
+        }
+        events.push({ type: 'mimic_triggered', label: h.label })
       }
     }
   }

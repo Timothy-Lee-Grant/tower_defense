@@ -2338,6 +2338,210 @@ export const HERO_SPRITES = {
   regenerator: drawRegenerator,
 }
 
+// ── New Off-Path Tower Sprites (7.2) ─────────────────────────────────────────
+
+// Catapult — wooden frame with a weighted throwing arm
+export function drawCatapult(ctx, tx, ty, t) {
+  const cx  = tx + TS / 2
+  const cy  = ty + TS / 2
+  const swg = swing(t, 0.0018) * 0.5   // arm oscillation
+
+  // Stone base
+  ctx.fillStyle = '#221810'
+  ctx.fillRect(tx + 2, ty + 28, TS - 4, TS - 30)
+  ctx.fillStyle = '#2e2016'
+  ctx.fillRect(tx + 4, ty + 30, TS - 8, TS - 34)
+
+  // Wheels (two circles at base corners)
+  for (const wx of [tx + 8, tx + TS - 12]) {
+    ctx.fillStyle = '#3a2810'
+    ctx.beginPath(); ctx.arc(wx, ty + TS - 6, 7, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = '#6a4820'
+    ctx.lineWidth   = 1.5
+    ctx.beginPath(); ctx.arc(wx, ty + TS - 6, 5, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#5a3818'
+    ctx.beginPath(); ctx.arc(wx, ty + TS - 6, 2, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Throwing arm — pivots at roughly 2/3 up the frame
+  ctx.save()
+  ctx.translate(cx, ty + 32)
+  ctx.rotate(swg)
+
+  // Long arm
+  ctx.strokeStyle = '#6a4820'
+  ctx.lineWidth   = 4
+  ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(0, 10); ctx.stroke()
+  ctx.strokeStyle = '#8a6030'
+  ctx.lineWidth   = 2
+  ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, 8); ctx.stroke()
+
+  // Projectile cup at top
+  ctx.fillStyle = '#4a3018'
+  ctx.fillRect(-5, -24, 10, 5)
+
+  // Counterweight at bottom
+  ctx.fillStyle = '#504040'
+  ctx.beginPath(); ctx.arc(0, 13, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#706050'
+  ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI * 2); ctx.fill()
+
+  // Cannonball in cup
+  ctx.fillStyle = '#1a1a20'
+  ctx.beginPath(); ctx.arc(0, -26, 4, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(100,100,120,0.6)'
+  ctx.beginPath(); ctx.arc(-1, -27, 2, 0, Math.PI * 2); ctx.fill()
+
+  ctx.restore()
+
+  // Frame sides
+  ctx.fillStyle = '#5a3818'
+  ctx.fillRect(tx + 4, ty + 24, 4, 16)
+  ctx.fillRect(tx + TS - 8, ty + 24, 4, 16)
+}
+
+
+// Spider Nest — dark web structure with a spider body
+export function drawSpiderNest(ctx, tx, ty, t) {
+  const cx  = tx + TS / 2
+  const cy  = ty + TS * 0.55
+  const leg = swing(t, 0.006) * 2   // leg sway
+
+  // Tile base — dark stone
+  ctx.fillStyle = '#0e0a08'
+  ctx.fillRect(tx + 2, ty + 2, TS - 4, TS - 4)
+
+  // Web strands radiating from center
+  ctx.strokeStyle = 'rgba(180,160,140,0.35)'
+  ctx.lineWidth   = 0.8
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(cx + Math.cos(a) * 20, cy + Math.sin(a) * 16)
+    ctx.stroke()
+  }
+  // Concentric web rings
+  for (let ring = 1; ring <= 3; ring++) {
+    const rx = ring * 7, ry = ring * 5.5
+    ctx.beginPath()
+    for (let i = 0; i <= 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      i === 0 ? ctx.moveTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry)
+              : ctx.lineTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry)
+    }
+    ctx.closePath()
+    ctx.stroke()
+  }
+
+  // Spider body — abdomen
+  ctx.fillStyle = '#1a0c04'
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 9, 7, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#2a1208'
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 7, 5.5, 0, 0, Math.PI * 2); ctx.fill()
+  // Red hourglass marking
+  ctx.fillStyle = 'rgba(220,40,20,0.8)'
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - 1); ctx.lineTo(cx - 3, cy + 2); ctx.lineTo(cx, cy + 5);
+  ctx.lineTo(cx + 3, cy + 2); ctx.closePath()
+  ctx.fill()
+
+  // Spider head / thorax
+  ctx.fillStyle = '#180a04'
+  ctx.beginPath(); ctx.ellipse(cx, cy - 5, 5.5, 4.5, 0, 0, Math.PI * 2); ctx.fill()
+
+  // Eyes — four red dots
+  ctx.fillStyle = 'rgba(255,50,30,0.9)'
+  for (let i = -1; i <= 2; i += 2) {
+    ctx.beginPath(); ctx.arc(cx + i * 2, cy - 6, 1.2, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(cx + i * 2, cy - 4, 1.0, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Legs — 4 pairs, sway with animation
+  ctx.strokeStyle = '#2a1608'
+  ctx.lineWidth   = 1.5
+  for (let side = -1; side <= 1; side += 2) {
+    for (let li = 0; li < 4; li++) {
+      const baseY = cy - 3 + li * 3
+      const legSwg = (li % 2 === 0 ? leg : -leg) * side * 0.5
+      ctx.beginPath()
+      ctx.moveTo(cx + side * 5, baseY)
+      ctx.quadraticCurveTo(
+        cx + side * 12 + legSwg, baseY - 3,
+        cx + side * 18 + legSwg, baseY + 4
+      )
+      ctx.stroke()
+    }
+  }
+}
+
+
+// Mimic Chest — treasure chest with subtly malevolent eyes
+export function drawMimicChest(ctx, tx, ty, t) {
+  const cx  = tx + TS / 2
+  const ey  = osc(t, 0.003)      // eye glow
+  const bl  = osc(t, 0.0008)     // slow blink
+
+  // Chest shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'
+  ctx.fillRect(tx + 6, ty + TS - 8, TS - 8, 4)
+
+  // Chest body — lower half
+  ctx.fillStyle = '#5a3a18'
+  ctx.fillRect(tx + 4, ty + 22, TS - 8, 20)
+  ctx.fillStyle = '#7a5228'
+  ctx.fillRect(tx + 6, ty + 24, TS - 12, 16)
+
+  // Chest lid — domed slightly
+  ctx.fillStyle = '#6a4820'
+  ctx.fillRect(tx + 4, ty + 14, TS - 8, 12)
+  ctx.fillStyle = '#8a6030'
+  ctx.fillRect(tx + 6, ty + 16, TS - 12, 8)
+  // Dome curve (simulated with 3 rects)
+  ctx.fillStyle = '#7a5828'
+  ctx.fillRect(tx + 8,      ty + 12, TS - 16, 5)
+  ctx.fillStyle = '#9a6838'
+  ctx.fillRect(tx + 10, ty + 10, TS - 20, 4)
+
+  // Metal bands & clasp
+  ctx.fillStyle = '#c0a040'
+  ctx.fillRect(tx + 4,  ty + 20, TS - 8, 3)   // band between lid and body
+  ctx.fillRect(tx + 4,  ty + 14, TS - 8, 2)   // top band
+  ctx.fillRect(tx + 4,  ty + 30, TS - 8, 2)   // lower band
+  // Corner studs
+  for (const [sx, sy] of [[tx+5,ty+22],[tx+TS-9,ty+22],[tx+5,ty+29],[tx+TS-9,ty+29]]) {
+    ctx.fillStyle = '#e0b840'
+    ctx.fillRect(sx, sy, 4, 4)
+    ctx.fillStyle = '#c09020'
+    ctx.fillRect(sx+1, sy+1, 2, 2)
+  }
+  // Clasp keyhole
+  ctx.fillStyle = '#0a0804'
+  ctx.fillRect(cx - 3, ty + 19, 6, 5)
+  ctx.beginPath(); ctx.arc(cx, ty + 21, 2.5, 0, Math.PI * 2); ctx.fill()
+
+  // THE EYES — only visible at close range (faint glow in chest seam)
+  const eyeAlpha = 0.55 + ey * 0.45
+  const blinkH   = bl > 0.85 ? 0 : 3   // blink when bl > 0.85
+
+  if (blinkH > 0) {
+    ctx.fillStyle = `rgba(255, ${60 + ey * 80 | 0}, 20, ${eyeAlpha})`
+    // Left eye
+    ctx.fillRect(cx - 7, ty + 22 - blinkH / 2, 4, blinkH)
+    // Right eye
+    ctx.fillRect(cx + 3, ty + 22 - blinkH / 2, 4, blinkH)
+    // Glow halo
+    ctx.fillStyle = `rgba(255,80,20,${eyeAlpha * 0.3})`
+    ctx.beginPath(); ctx.arc(cx - 5, ty + 22, 4, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(cx + 5, ty + 22, 4, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Golden shimmer — treasure chest tease
+  const shimmer = 0.12 + 0.08 * Math.sin(t * 0.005 + 0.5)
+  ctx.fillStyle = `rgba(240,200,60,${shimmer})`
+  ctx.fillRect(tx + 6, ty + 24, TS - 12, 16)
+}
+
 export const TILE_SPRITES = {
   skeleton: drawSkeletonTile,
   slime:    drawSlimeTile,
@@ -2355,6 +2559,10 @@ export const TILE_SPRITES = {
   poison:   drawPoison,
   lava:     drawLava,
   ice:      drawIce,
+  // New off-path towers (7.2)
+  catapult: drawCatapult,
+  spider:   drawSpiderNest,
+  mimic:    drawMimicChest,
   // New traps (7.1)
   pit:      drawPitTrap,
   pendulum: drawPendulumTrap,

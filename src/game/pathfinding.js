@@ -13,7 +13,7 @@ const PASSABLE = new Set([
   TILE.DART,     TILE.FIRE,     TILE.POISON,   TILE.ICE,
   TILE.SKELETON, TILE.WRAITH,   TILE.SLIME,
   TILE.TROLL,    TILE.BAT,      TILE.SHADOW,   TILE.IDOL,
-  TILE.GARGOYLE,
+  TILE.GARGOYLE, TILE.CATAPULT, TILE.SPIDER,   TILE.MIMIC,
 ])
 
 // Movement cost for a tile, given hero preferences.

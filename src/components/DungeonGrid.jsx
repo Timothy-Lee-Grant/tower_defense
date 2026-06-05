@@ -22,6 +22,10 @@ const TILE_COLORS = {
   [TILE.WRAITH]:   { bg: '#100c18', border: '#1c1428' },
   [TILE.LAVA]:     { bg: '#200400', border: '#3a0800' },
   [TILE.ICE]:      { bg: '#08101e', border: '#10182e' },
+  // New off-path towers (7.2)
+  [TILE.CATAPULT]: { bg: '#1e1408', border: '#302010' },
+  [TILE.SPIDER]:   { bg: '#0e0a08', border: '#1a1008' },
+  [TILE.MIMIC]:    { bg: '#1c1008', border: '#2e1c08' },
   // New traps (7.1)
   [TILE.PIT]:      { bg: '#1a1008', border: '#2e2010' },
   [TILE.PENDULUM]: { bg: '#14101e', border: '#222038' },
@@ -606,6 +610,28 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         // Inner dot
         ctx.fillStyle = `rgba(200,80,255,${runeAlpha * 0.6})`
         ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill()
+        ctx.restore()
+      }
+
+      // Mimic distraction — spinning golden ring (hero is stopped, investigating)
+      if ((hero.distractedTimer ?? 0) > 0) {
+        const dPct  = hero.distractedTimer / 1500
+        const angle = t * 0.012
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(angle)
+        ctx.strokeStyle = `rgba(240,190,40,${0.5 + dPct * 0.5})`
+        ctx.lineWidth   = 2.5
+        ctx.setLineDash([5, 4])
+        ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.stroke()
+        ctx.setLineDash([])
+        // Small "?" label
+        ctx.rotate(-angle)
+        ctx.font         = 'bold 11px serif'
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle    = `rgba(240,200,60,${dPct * 0.9})`
+        ctx.fillText('?', 0, -28)
         ctx.restore()
       }
 

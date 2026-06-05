@@ -28,6 +28,10 @@ export const TILE = {
   SKELETON: 'skeleton',
   WRAITH:   'wraith',
   SLIME:    'slime',
+  // New off-path towers (7.2)
+  CATAPULT: 'catapult',  // random-target, long range, heavy single hit
+  SPIDER:   'spider',    // rapid bites — applies BOTH slow + poison every hit
+  MIMIC:    'mimic',     // no damage; distracts heroes, doubles nearby tower speed
   // Tier 2 monsters
   TROLL:    'troll',
   BAT:      'bat',
@@ -277,6 +281,31 @@ export const DUNGEON_TOOLS = [
     placesOn: 'open',
     description: 'Beside path. Long range. Always targets the most advanced hero — stops gold carriers dead in their tracks.',
     color: '#5a5a6a', unlocked: false, tier: 2,
+  },
+
+  // ── New off-path towers (7.2) ───────────────────────────────────────────
+  {
+    id: TILE.CATAPULT, category: TOOL_CATEGORY.TRAPS,
+    label: 'Catapult', emoji: '🏹', cost: 100, damage: 50,
+    range: 5, attackSpeed: 3500, randomTarget: true,
+    placesOn: 'open',
+    description: 'Beside path. Heavy long-range shot every 3.5 s — hits a RANDOM hero in range, not the closest. Unpredictable.',
+    color: '#4a3a20', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.SPIDER, category: TOOL_CATEGORY.MONSTERS,
+    label: 'Spider Nest', emoji: '🕷️', cost: 60, damage: 5,
+    range: 2, attackSpeed: 400, slowOnHit: true, poisonOnHit: true,
+    placesOn: 'open',
+    description: 'Beside path. Rapid venom bites — each hit applies BOTH slow AND poison simultaneously. Pairs devastatingly with Cursed Idol.',
+    color: '#1a0e08', unlocked: false, tier: 2,
+  },
+  {
+    id: TILE.MIMIC, category: TOOL_CATEGORY.STRUCTURES,
+    label: 'Mimic Chest', emoji: '📦', cost: 85, damage: 0, range: 2,
+    placesOn: 'open', distractOnHit: true,
+    description: 'Beside path. No attack — but any hero within 2 tiles stops for 1.5 s to "investigate". During the pause every nearby tower fires at double speed. Each hero is fooled only once.',
+    color: '#3a2810', unlocked: false, tier: 2,
   },
 ]
 
