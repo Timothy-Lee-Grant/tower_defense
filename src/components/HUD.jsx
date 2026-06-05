@@ -83,14 +83,54 @@ export default function HUD() {
         </div>
       </div>
 
-      {/* Right: gold & stats */}
+      {/* Right: gold, war chest & kills */}
       <div style={styles.section}>
+
+        {/* Gold — planning budget (dimmed during wave since it can't be spent) */}
         <div style={styles.statPair}>
-          <span style={styles.label}>GOLD</span>
-          <span style={{ ...styles.bigValue, color: 'var(--gold-bright)' }}>
+          <span style={styles.label}>
+            {phase === PHASE.WAVE ? 'NEXT WAVE' : 'GOLD'}
+          </span>
+          <span style={{
+            ...styles.bigValue,
+            color: phase === PHASE.WAVE ? 'var(--text-muted)' : 'var(--gold-bright)',
+            fontSize: phase === PHASE.WAVE ? '0.85rem' : '1.1rem',
+            transition: 'color 0.3s, font-size 0.3s',
+          }}>
             {gold}g
           </span>
         </div>
+
+        <div style={styles.statDivider} />
+
+        {/* War Chest — always shown; prominent amber glow during wave (spendable now) */}
+        <div style={{
+          ...styles.statPair,
+          padding: phase === PHASE.WAVE ? '0.2rem 0.5rem' : '0',
+          background: phase === PHASE.WAVE ? 'rgba(180,100,20,0.15)' : 'transparent',
+          borderRadius: 5,
+          border: phase === PHASE.WAVE ? '1px solid rgba(232,160,48,0.3)' : '1px solid transparent',
+          transition: 'all 0.3s',
+        }}>
+          <span style={{
+            ...styles.label,
+            color: phase === PHASE.WAVE ? '#e8a030' : 'var(--text-muted)',
+          }}>
+            ⚔ WAR CHEST
+          </span>
+          <span style={{
+            ...styles.bigValue,
+            color: phase === PHASE.WAVE ? '#f0c060' : 'var(--text-secondary)',
+            fontSize: phase === PHASE.WAVE ? '1.1rem' : '0.9rem',
+            textShadow: phase === PHASE.WAVE ? '0 0 10px rgba(240,192,96,0.4)' : 'none',
+            transition: 'all 0.3s',
+          }}>
+            {bank}g
+          </span>
+        </div>
+
+        <div style={styles.statDivider} />
+
         <div style={styles.statPair}>
           <span style={styles.label}>SLAIN</span>
           <span style={{ ...styles.bigValue, color: 'var(--bone)' }}>{heroesKilled}</span>
@@ -210,6 +250,12 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '0.1rem',
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    background: 'rgba(255,255,255,0.07)',
+    flexShrink: 0,
   },
   actions: {
     display: 'flex',

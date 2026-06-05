@@ -426,6 +426,7 @@ export const DIFFICULTIES = {
 }
 
 export const SELL_REFUND_RATE      = 0.5
+export const BANK_COST_MULT        = 1.5   // war-chest emergency-placement premium
 export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100, warlord: 60, regenerator: 50 }
 export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero who has the treasure
 export const TREASURE_MAX_HP       = 300

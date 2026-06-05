@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
-  SELL_REFUND_RATE, WAVE_CONFIGS,
+  SELL_REFUND_RATE, BANK_COST_MULT, WAVE_CONFIGS,
   HERO_TYPES, DIFFICULTIES,
   PATH_ALL, PATH_SET, PATH_CENTER_SET, ENTRANCE, TREASURE,
 } from '../game/constants.js'
@@ -96,7 +96,8 @@ export const useGameStore = create((set, get) => ({
   selectCategory(cat) { set({ selectedCategory: cat, selectedTool: null }) },
 
   placeTile(col, row) {
-    const { grid, selectedTool, gold, unlockedTools } = get()
+    const { grid, selectedTool, gold, unlockedTools, phase } = get()
+    if (phase !== PHASE.PLAN) return   // plan phase only — use bankPlaceTile during waves
     if (!selectedTool || !unlockedTools.includes(selectedTool)) return
 
     const cur = grid[row]?.[col]
@@ -115,6 +116,34 @@ export const useGameStore = create((set, get) => ({
     const newGrid = grid.map(r => [...r])
     newGrid[row][col] = selectedTool
     set({ grid: newGrid, gold: gold - def.cost })
+    audio.play('tile_placed')
+  },
+
+  // ── Emergency placement during waves — costs from bank at 1.5× ────────────
+  bankPlaceTile(col, row) {
+    const { grid, selectedTool, bank, unlockedTools, phase } = get()
+    if (phase !== PHASE.WAVE) return   // wave phase only
+    if (!selectedTool || !unlockedTools.includes(selectedTool)) return
+
+    const cur = grid[row]?.[col]
+    if (!cur || cur === TILE.ENTRANCE || cur === TILE.TREASURE) return
+
+    const def = DUNGEON_TOOLS.find(t => t.id === selectedTool)
+    if (!def) return
+
+    const cost = Math.ceil(def.cost * BANK_COST_MULT)
+    if (bank < cost) return
+
+    const onCenterline = PATH_CENTER_SET.has(`${col},${row}`) ||
+      [TILE.SPIKE, TILE.BOULDER, TILE.DOOR, TILE.LAVA].includes(cur)
+    const anyPath = PATH_SET.has(`${col},${row}`)
+
+    if (def.placesOn === 'path' && !onCenterline) return
+    if (def.placesOn === 'open' && (anyPath || cur !== TILE.EMPTY)) return
+
+    const newGrid = grid.map(r => [...r])
+    newGrid[row][col] = selectedTool
+    set({ grid: newGrid, bank: bank - cost })
     audio.play('tile_placed')
   },
 

@@ -8,9 +8,13 @@ import BattleLog from './BattleLog.jsx'
 import HUD from './HUD.jsx'
 
 export default function GameScreen() {
-  const phase      = useGameStore(s => s.phase)
-  const placeTile  = useGameStore(s => s.placeTile)
-  const removeTile = useGameStore(s => s.removeTile)
+  const phase          = useGameStore(s => s.phase)
+  const placeTile      = useGameStore(s => s.placeTile)
+  const bankPlaceTile  = useGameStore(s => s.bankPlaceTile)
+  const removeTile     = useGameStore(s => s.removeTile)
+
+  // During a wave, tile clicks spend from the war chest at 1.5× cost.
+  const handleTileClick = phase === PHASE.WAVE ? bankPlaceTile : placeTile
 
   return (
     <div style={styles.root}>
@@ -27,7 +31,7 @@ export default function GameScreen() {
         {/* Center: dungeon grid */}
         <div style={styles.gridWrapper}>
           <DungeonGrid
-            onTileClick={placeTile}
+            onTileClick={handleTileClick}
             onTileRightClick={removeTile}
           />
         </div>
