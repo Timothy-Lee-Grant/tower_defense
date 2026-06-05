@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useGameStore } from '../store/gameStore.js'
-import { DIFFICULTIES } from '../game/constants.js'
+import {
+  DIFFICULTIES, WAVE_CONFIGS as _WC,
+  GRID_COLS, GRID_ROWS, TILE, PATH_ALL, ENTRANCE, TREASURE,
+} from '../game/constants.js'
 import { audio } from '../audio/audioEngine.js'
 import { MENU_QUIPS } from '../game/gerald.js'
 import {
   listSaves, deleteSave, readStats, favoriteTool,
   relativeTime, decodeLayout,
 } from '../game/persistence.js'
-import { GRID_COLS, GRID_ROWS, TILE, PATH_ALL, ENTRANCE, TREASURE, WAVE_CONFIGS as _WC } from '../game/constants.js'
 
 function buildEmptyGrid() {
   const grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(TILE.EMPTY))

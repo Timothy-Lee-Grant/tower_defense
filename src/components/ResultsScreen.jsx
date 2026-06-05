@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
-import { TREASURE_MAX_HP } from '../game/constants.js'
 import { selectResultsComment } from '../game/gerald.js'
 
 export default function ResultsScreen() {
@@ -10,16 +9,16 @@ export default function ResultsScreen() {
   const goldEarnedThisWave    = useGameStore(s => s.goldEarnedThisWave)
   const goldStolenThisWave    = useGameStore(s => s.goldStolenThisWave)
   const treasureHp            = useGameStore(s => s.treasureHp)
+  const treasureMaxHp         = useGameStore(s => s.treasureMaxHp)   // difficulty-adjusted ceiling
   const upgradeCards          = useGameStore(s => s.upgradeCards)
   const pickUpgradeCard       = useGameStore(s => s.pickUpgradeCard)
 
   const [picked, setPicked] = useState(false)
 
-  const hpRatio   = treasureHp / TREASURE_MAX_HP
+  // Use the store's difficulty-adjusted max, not the hardcoded constant (spec bug 18.6)
+  const hpRatio   = treasureMaxHp > 0 ? treasureHp / treasureMaxHp : 1
   const perfect   = heroesEscapedWithGold === 0
   const lostHoard = treasureHp <= 0
-
-  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
 
   const geraldMemo = selectResultsComment({
     heroesKilled,
@@ -79,7 +78,7 @@ export default function ResultsScreen() {
             <div style={s.stolenBar}>
               <div style={{
                 ...s.stolenFill,
-                width: `${Math.min(100, (goldStolenThisWave / TREASURE_MAX_HP) * 100).toFixed(1)}%`,
+                width: `${Math.min(100, treasureMaxHp > 0 ? (goldStolenThisWave / treasureMaxHp) * 100 : 0).toFixed(1)}%`,
               }} />
             </div>
             <span style={s.stolenAmount}>{goldStolenThisWave} HP</span>

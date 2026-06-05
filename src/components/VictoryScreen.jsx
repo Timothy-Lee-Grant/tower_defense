@@ -4,7 +4,7 @@ import { WAVE_CONFIGS } from '../game/constants.js'
 import { selectVictoryComment } from '../game/gerald.js'
 
 export default function VictoryScreen() {
-  const heroesKilled  = useGameStore(s => s.heroesKilled)
+  const runKills      = useGameStore(s => s.runKills)     // total across all 14 waves
   const bank          = useGameStore(s => s.bank)
   const treasureHp    = useGameStore(s => s.treasureHp)
   const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
@@ -25,7 +25,7 @@ export default function VictoryScreen() {
 
         <div style={s.statsRow}>
           <StatCard value={WAVE_CONFIGS.length} label="Waves Survived" color="var(--gold-bright)" />
-          <StatCard value={heroesKilled}         label="Heroes Slain"   color="var(--bone)" />
+          <StatCard value={runKills}              label="Heroes Slain"   color="var(--bone)" />
           <StatCard value={`${bank}g`}           label="Gold Earned"    color="var(--gold-bright)" />
         </div>
 

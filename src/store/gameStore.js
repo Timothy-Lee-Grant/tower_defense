@@ -47,6 +47,7 @@ export const useGameStore = create((set, get) => ({
   treasureMaxHp:  DIFFICULTIES.medium.treasureHp,
   treasureHp:     DIFFICULTIES.medium.treasureHp,
   heroesKilled:   0,
+  runKills:       0,           // cumulative kills across all waves this run
   heroesEscapedWithGold: 0,   // escaped AND had the treasure
   heroesEscapedEmpty:    0,   // got scared off / escaped without loot (edge case)
   goldEarnedThisWave:    0,
@@ -84,6 +85,7 @@ export const useGameStore = create((set, get) => ({
       treasureMaxHp: diff.treasureHp,
       treasureHp:    diff.treasureHp,
       heroesKilled: 0,
+      runKills:     0,
       heroesEscapedWithGold: 0,
       heroesEscapedEmpty:    0,
       goldEarnedThisWave: 0,
@@ -96,10 +98,10 @@ export const useGameStore = create((set, get) => ({
   },
 
   goToMenu() {
-    const { phase, difficulty, waveIndex, heroesKilled, grid } = get()
+    const { phase, difficulty, waveIndex, runKills, grid } = get()
     // Record stats whenever quitting an in-progress run (not from menu itself)
     if (phase !== PHASE.MENU && phase !== PHASE.VICTORY) {
-      recordRunEnd({ difficulty, waveIndex, heroesKilled, grid })
+      recordRunEnd({ difficulty, waveIndex, heroesKilled: runKills, grid })
     }
     set({ phase: PHASE.MENU })
   },
@@ -129,6 +131,7 @@ export const useGameStore = create((set, get) => ({
       treasureMaxHp: saveData.treasureMaxHp,
       // Per-wave stats reset; run history stays in localStorage
       heroesKilled:          0,
+      runKills:              0,
       heroesEscapedWithGold: 0,
       heroesEscapedEmpty:    0,
       goldEarnedThisWave:    0,
@@ -370,7 +373,8 @@ export const useGameStore = create((set, get) => ({
         heroes:          enrichedHeroes,
         trapTimers:      result.trapTimers,
         treasureHp:      newTreasureHp,
-        heroesKilled:    state.heroesKilled    + (newDead    - prevDead),
+        heroesKilled:    state.heroesKilled + (newDead - prevDead),
+        runKills:        state.runKills     + (newDead - prevDead),
         heroesEscapedWithGold: state.heroesEscapedWithGold + (newEscGold - prevEscGold),
         heroesEscapedEmpty:    state.heroesEscapedEmpty    + (newEscNone - prevEscNone),
         goldEarnedThisWave: state.goldEarnedThisWave + result.goldEarned,
@@ -458,10 +462,10 @@ export const useGameStore = create((set, get) => ({
     if (isLastWave) {
       // Run complete — record stats (don't auto-save; game is over)
       recordRunEnd({
-        difficulty:    fresh.difficulty,
-        waveIndex:     fresh.waveIndex,
-        heroesKilled:  fresh.heroesKilled,
-        grid:          fresh.grid,
+        difficulty:   fresh.difficulty,
+        waveIndex:    fresh.waveIndex,
+        heroesKilled: fresh.runKills,   // full-run total, not just last wave
+        grid:         fresh.grid,
       })
     } else {
       // Auto-save at the start of each new plan phase
