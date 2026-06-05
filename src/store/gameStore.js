@@ -9,6 +9,7 @@ import {
 import { createHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
 import { getHeroCallout } from '../game/gerald.js'
+import { writeSave, recordRunEnd, SAVE_SLOTS } from '../game/persistence.js'
 
 // ── Grid factory ───────────────────────────────────────────────────────────
 function makeInitialGrid() {
@@ -59,6 +60,9 @@ export const useGameStore = create((set, get) => ({
   showPathPreview: false,
   showCoverageMap: false,
 
+  // Layout import: if set when startGame() is called, this grid is used instead of makeInitialGrid()
+  pendingLayout: null,
+
   currentWaveConfig: () => WAVE_CONFIGS[get().waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1],
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -69,10 +73,11 @@ export const useGameStore = create((set, get) => ({
   },
 
   startGame() {
-    const diff = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    const diff    = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    const pending = get().pendingLayout
     set({
       phase: PHASE.PLAN,
-      grid:  makeInitialGrid(),
+      grid:  pending ?? makeInitialGrid(),
       gold:  diff.startingGold,
       bank:  0,
       waveIndex: 0,
@@ -86,10 +91,18 @@ export const useGameStore = create((set, get) => ({
       battleLog: [],
       attackFlashes: [],
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
+      pendingLayout: null,
     })
   },
 
-  goToMenu() { set({ phase: PHASE.MENU }) },
+  goToMenu() {
+    const { phase, difficulty, waveIndex, heroesKilled, grid } = get()
+    // Record stats whenever quitting an in-progress run (not from menu itself)
+    if (phase !== PHASE.MENU && phase !== PHASE.VICTORY) {
+      recordRunEnd({ difficulty, waveIndex, heroesKilled, grid })
+    }
+    set({ phase: PHASE.MENU })
+  },
 
   triggerScreenShake(intensity) {
     set({ screenShake: intensity })
@@ -100,6 +113,35 @@ export const useGameStore = create((set, get) => ({
   selectCategory(cat) { set({ selectedCategory: cat, selectedTool: null }) },
   togglePathPreview()  { set(s => ({ showPathPreview: !s.showPathPreview })) },
   toggleCoverageMap()  { set(s => ({ showCoverageMap: !s.showCoverageMap })) },
+  setPendingLayout(grid) { set({ pendingLayout: grid }) },
+
+  // ── Restore from a saved game ──────────────────────────────────────────────
+  loadGame(saveData) {
+    set({
+      phase:         PHASE.PLAN,
+      difficulty:    saveData.difficulty,
+      waveIndex:     saveData.waveIndex,
+      grid:          saveData.grid,
+      gold:          saveData.gold,
+      bank:          saveData.bank,
+      unlockedTools: saveData.unlockedTools,
+      treasureHp:    saveData.treasureHp,
+      treasureMaxHp: saveData.treasureMaxHp,
+      // Per-wave stats reset; run history stays in localStorage
+      heroesKilled:          0,
+      heroesEscapedWithGold: 0,
+      heroesEscapedEmpty:    0,
+      goldEarnedThisWave:    0,
+      goldStolenThisWave:    0,
+      battleLog:     [],
+      attackFlashes: [],
+      upgradeCards:  [],
+      heroes:        [],
+      showPathPreview: false,
+      showCoverageMap: false,
+      pendingLayout:   null,
+    })
+  },
 
   placeTile(col, row) {
     const { grid, selectedTool, gold, unlockedTools, phase } = get()
@@ -406,10 +448,24 @@ export const useGameStore = create((set, get) => ({
     const nextWaveIndex = waveIndex + 1
     const isLastWave    = nextWaveIndex >= WAVE_CONFIGS.length
     set({
-      phase:      isLastWave ? PHASE.VICTORY : PHASE.PLAN,
-      waveIndex:  nextWaveIndex,
+      phase:        isLastWave ? PHASE.VICTORY : PHASE.PLAN,
+      waveIndex:    nextWaveIndex,
       upgradeCards: [],
-      heroes: [],
+      heroes:       [],
     })
+
+    const fresh = get()
+    if (isLastWave) {
+      // Run complete — record stats (don't auto-save; game is over)
+      recordRunEnd({
+        difficulty:    fresh.difficulty,
+        waveIndex:     fresh.waveIndex,
+        heroesKilled:  fresh.heroesKilled,
+        grid:          fresh.grid,
+      })
+    } else {
+      // Auto-save at the start of each new plan phase
+      writeSave(SAVE_SLOTS.auto, fresh)
+    }
   },
 }))

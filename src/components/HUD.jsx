@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { WAVE_CONFIGS, DIFFICULTIES } from '../game/constants.js'
 import { audio } from '../audio/audioEngine.js'
+import { writeSave, SAVE_SLOTS } from '../game/persistence.js'
 
 export default function HUD() {
   const phase          = useGameStore(s => s.phase)
@@ -15,9 +16,21 @@ export default function HUD() {
 
   const difficulty    = useGameStore(s => s.difficulty)
   const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
+  const grid          = useGameStore(s => s.grid)
+  const unlockedTools = useGameStore(s => s.unlockedTools)
   const waveConfig    = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
   const diff          = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
   const hpRatio       = treasureHp / treasureMaxHp
+
+  // ── Save feedback state ───────────────────────────────────────────────────
+  const [savedMsg, setSavedMsg] = useState('')
+  const handleManualSave = useCallback(() => {
+    const ok = writeSave(SAVE_SLOTS.manual1, {
+      difficulty, gold, bank, waveIndex, grid, unlockedTools, treasureHp, treasureMaxHp,
+    })
+    setSavedMsg(ok ? '✓ Saved' : '✗ Failed')
+    setTimeout(() => setSavedMsg(''), 1800)
+  }, [difficulty, gold, bank, waveIndex, grid, unlockedTools, treasureHp, treasureMaxHp])
 
   // ── Audio controls state ──────────────────────────────────────────────────
   const [muted,      setMuted]      = useState(() => audio.muted)
@@ -140,9 +153,18 @@ export default function HUD() {
       {/* Action buttons */}
       <div style={styles.actions}>
         {phase === PHASE.PLAN && (
-          <button style={styles.btnPrimary} onClick={startWave}>
-            ⚔ Send Them In
-          </button>
+          <>
+            <button style={styles.btnPrimary} onClick={startWave}>
+              ⚔ Send Them In
+            </button>
+            <button
+              style={{ ...styles.menuBtn, fontSize: '0.72rem', position: 'relative' }}
+              onClick={handleManualSave}
+              title="Save to manual slot 1"
+            >
+              {savedMsg || '💾'}
+            </button>
+          </>
         )}
         {phase === PHASE.WAVE && (
           <div style={styles.waveIndicator}>

@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { WAVE_CONFIGS, HERO_TYPES } from '../game/constants.js'
 import { selectSynergyComment } from '../game/gerald.js'
 import { estimateSurvival, getImmunityWarnings, HERO_PATH_COLORS } from '../game/analysis.js'
+import { encodeLayout } from '../game/persistence.js'
 import DungeonGrid from './DungeonGrid.jsx'
 import ToolPalette from './ToolPalette.jsx'
 import BattleLog from './BattleLog.jsx'
@@ -51,6 +52,16 @@ function PlanHints() {
   const waveIndex        = useGameStore(s => s.waveIndex)
   const grid             = useGameStore(s => s.grid)
   const showPathPreview  = useGameStore(s => s.showPathPreview)
+  const [copyMsg, setCopyMsg] = useState('')
+  const handleCopyLayout = useCallback(() => {
+    const code = encodeLayout(grid)
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopyMsg('✓ Copied!')
+    }).catch(() => {
+      setCopyMsg(code.slice(0, 12) + '…')
+    })
+    setTimeout(() => setCopyMsg(''), 2200)
+  }, [grid])
   const showCoverageMap  = useGameStore(s => s.showCoverageMap)
   const togglePathPreview = useGameStore(s => s.togglePathPreview)
   const toggleCoverageMap = useGameStore(s => s.toggleCoverageMap)
@@ -174,6 +185,17 @@ function PlanHints() {
             Coloured lines show each hero type's route
           </p>
         )}
+      </div>
+
+      {/* Layout export */}
+      <div style={{ marginTop: '0.5rem' }}>
+        <button
+          style={{ ...styles.toggleBtn, width: '100%', marginTop: '0.3rem' }}
+          onClick={handleCopyLayout}
+          title="Copy a compact layout code to your clipboard to share this dungeon"
+        >
+          {copyMsg || '📋 Copy Layout Code'}
+        </button>
       </div>
 
       {/* Controls */}
