@@ -100,11 +100,17 @@ export default function ToolPalette() {
               </div>
 
               {isSelected && (
-                <p style={styles.toolDesc}>
-                  {isWave
-                    ? `Emergency cost: ${displayCost}g from war chest. ${tool.description}`
-                    : tool.description}
-                </p>
+                <div style={styles.toolDescBlock}>
+                  <p style={styles.toolDesc}>
+                    {isWave
+                      ? `Emergency cost: ${displayCost}g from war chest. ${tool.description}`
+                      : tool.description}
+                  </p>
+                  {/* DPS / gold efficiency — only shown for ranged damage towers */}
+                  {tool.damage && tool.attackSpeed && tool.range && (
+                    <DpsLine tool={tool} />
+                  )}
+                </div>
               )}
 
               {!isUnlocked && (
@@ -125,6 +131,32 @@ export default function ToolPalette() {
       </div>
     </div>
   )
+}
+
+function DpsLine({ tool }) {
+  const dps      = tool.damage / (tool.attackSpeed / 1000)
+  const dpsPerG  = dps / tool.cost
+  const isAoe    = tool.aoeAttack
+  const aoeNote  = isAoe ? ' (hits all in range)' : ''
+  return (
+    <div style={dpsStyle}>
+      <span style={dpsChip}>{dps.toFixed(1)} DPS</span>
+      <span style={dpsChip}>{dpsPerG.toFixed(2)} DPS/g{aoeNote}</span>
+      <span style={dpsChip}>range {tool.range}</span>
+    </div>
+  )
+}
+
+const dpsStyle = {
+  display: 'flex', flexWrap: 'wrap', gap: '0.25rem',
+  marginTop: '0.3rem', paddingLeft: '1.6rem',
+}
+const dpsChip = {
+  fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+  color: 'var(--gold-dim)', background: 'rgba(232,196,74,0.08)',
+  border: '1px solid rgba(232,196,74,0.15)',
+  borderRadius: 3, padding: '1px 5px', letterSpacing: '0.04em',
+  whiteSpace: 'nowrap',
 }
 
 const styles = {
@@ -238,8 +270,11 @@ const styles = {
     fontWeight: 700,
     flexShrink: 0,
   },
+  toolDescBlock: {
+    marginTop: '0.3rem',
+  },
   toolDesc: {
-    marginTop: '0.4rem',
+    marginTop: '0.1rem',
     fontSize: '0.75rem',
     fontFamily: "'Crimson Text', serif",
     fontStyle: 'italic',

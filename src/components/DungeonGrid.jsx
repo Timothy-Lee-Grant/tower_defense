@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, TREASURE, ENTRANCE } from '../game/constants.js'
+import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, TREASURE, ENTRANCE, PATH_TILES, WAVE_CONFIGS } from '../game/constants.js'
 import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
 import { ParticleSystem, PARTICLE_EFFECTS } from '../rendering/particles.js'
+import { computeCoverageMap, HERO_PATH_COLORS } from '../game/analysis.js'
 
 // ── Tile base colors ────────────────────────────────────────────────────────
 const TILE_COLORS = {
@@ -59,9 +60,12 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const heroes        = useGameStore(s => s.heroes)
   const selectedTool  = useGameStore(s => s.selectedTool)
   const attackFlashes = useGameStore(s => s.attackFlashes)
-  const screenShake   = useGameStore(s => s.screenShake)
-  const treasureHp    = useGameStore(s => s.treasureHp)
-  const trapTimers    = useGameStore(s => s.trapTimers)
+  const screenShake      = useGameStore(s => s.screenShake)
+  const treasureHp       = useGameStore(s => s.treasureHp)
+  const trapTimers       = useGameStore(s => s.trapTimers)
+  const showPathPreview  = useGameStore(s => s.showPathPreview)
+  const showCoverageMap  = useGameStore(s => s.showCoverageMap)
+  const waveIndex        = useGameStore(s => s.waveIndex)
 
   const hoveredTile      = useRef(null)
   const animFrame        = useRef(null)
@@ -86,6 +90,22 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const prevGridRef        = useRef(null)
   const prevTreasureHpRef  = useRef(treasureHp)
   const lastFlashTimeRef   = useRef(0)
+
+  // ── Overlay state refs ────────────────────────────────────────────────────
+  const coverageMapRef     = useRef(null)   // 2D array of coverage counts, or null
+  const pathHeroTypesRef   = useRef([])     // hero type IDs for next wave
+
+  // Recompute coverage map when grid changes or overlay toggled
+  useEffect(() => {
+    coverageMapRef.current = showCoverageMap ? computeCoverageMap(grid) : null
+  }, [grid, showCoverageMap])
+
+  // Recompute hero types for path preview when wave index or overlay changes
+  useEffect(() => {
+    if (!showPathPreview) { pathHeroTypesRef.current = []; return }
+    const wave = WAVE_CONFIGS[waveIndex]
+    pathHeroTypesRef.current = wave ? [...new Set(wave.heroes)] : []
+  }, [waveIndex, showPathPreview])
 
   const selectedToolDef = selectedTool
     ? DUNGEON_TOOLS.find(t => t.id === selectedTool)
@@ -303,7 +323,91 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       }
     }
 
-    // ── 2c. Tower ready-to-fire glow ring ────────────────────────────────────
+    // ── 2c. Coverage heatmap overlay ─────────────────────────────────────────
+    const cmap = coverageMapRef.current
+    if (cmap) {
+      // Green tint on covered tiles
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const count = cmap[row][col]
+          if (count === 0) continue
+          const intensity = Math.min(1, count / 3)   // 3+ towers = full green
+          ctx.fillStyle = `rgba(40,200,80,${intensity * 0.26})`
+          ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        }
+      }
+      // Red warning on path tiles with zero coverage — these are gaps!
+      for (const pt of PATH_TILES) {
+        if ((cmap[pt.row]?.[pt.col] ?? 0) === 0) {
+          ctx.fillStyle = 'rgba(220,40,40,0.22)'
+          ctx.fillRect(pt.col * TILE_SIZE, pt.row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        }
+      }
+      // Coverage count label on covered path tiles (shows number of towers)
+      ctx.font = `bold 9px monospace`
+      ctx.textAlign    = 'center'
+      ctx.textBaseline = 'middle'
+      for (const pt of PATH_TILES) {
+        const count = cmap[pt.row]?.[pt.col] ?? 0
+        if (count === 0) continue
+        ctx.fillStyle = count >= 3 ? 'rgba(80,255,100,0.9)' : 'rgba(180,255,180,0.8)'
+        ctx.fillText(count, pt.col * TILE_SIZE + TILE_SIZE / 2, pt.row * TILE_SIZE + TILE_SIZE / 2)
+      }
+    }
+
+    // ── 2d. Path preview overlay ──────────────────────────────────────────────
+    const previewTypes = pathHeroTypesRef.current
+    if (previewTypes.length > 0) {
+      const heroCount = previewTypes.length
+      previewTypes.forEach((heroTypeId, idx) => {
+        const color  = HERO_PATH_COLORS[heroTypeId] ?? '#ffffff'
+        // Spread lines ±offset perpendicular to the path direction
+        const offset = (idx - (heroCount - 1) / 2) * 2.8
+
+        ctx.save()
+        ctx.strokeStyle = color
+        ctx.lineWidth   = 2.2
+        // Animate the dashes flowing forward along the path
+        ctx.setLineDash([6, 5])
+        ctx.lineDashOffset = -(t * 0.02) % 11
+        ctx.lineJoin  = 'round'
+        ctx.globalAlpha = 0.75
+        ctx.beginPath()
+
+        let started = false
+        for (let i = 0; i < PATH_TILES.length; i++) {
+          const tile     = PATH_TILES[i]
+          // Compute perpendicular offset from averaged direction between neighbors
+          const prev     = PATH_TILES[Math.max(0, i - 1)]
+          const next     = PATH_TILES[Math.min(PATH_TILES.length - 1, i + 1)]
+          const dx       = next.col - prev.col
+          const dy       = next.row - prev.row
+          const len      = Math.sqrt(dx * dx + dy * dy) || 1
+          const px       = (-dy / len) * offset
+          const py       = (dx  / len) * offset
+
+          const x = tile.col * TILE_SIZE + TILE_SIZE / 2 + px
+          const y = tile.row * TILE_SIZE + TILE_SIZE / 2 + py
+
+          if (!started) { ctx.moveTo(x, y); started = true }
+          else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
+        ctx.restore()
+      })
+      ctx.setLineDash([])
+
+      // Small legend dots at the entrance for each hero type
+      previewTypes.forEach((heroTypeId, idx) => {
+        const color  = HERO_PATH_COLORS[heroTypeId] ?? '#ffffff'
+        const ex     = ENTRANCE.col * TILE_SIZE + TILE_SIZE / 2
+        const ey     = ENTRANCE.row * TILE_SIZE - 6 - idx * 7
+        ctx.fillStyle = color
+        ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fill()
+      })
+    }
+
+    // ── 2e. Tower ready-to-fire glow ring ────────────────────────────────────
     // Towers that have fully recharged their cooldown (timer ≥ attackSpeed)
     // show a faint pulsing amber ring — "loaded and waiting."
     for (let row = 0; row < GRID_ROWS; row++) {
@@ -543,7 +647,7 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
     animFrame.current = requestAnimationFrame(draw)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, selectedTool, selectedToolDef])
+  }, [phase, selectedTool, selectedToolDef, showPathPreview, showCoverageMap])
 
   useEffect(() => {
     animFrame.current = requestAnimationFrame(draw)

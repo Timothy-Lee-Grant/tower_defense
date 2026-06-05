@@ -55,6 +55,10 @@ export const useGameStore = create((set, get) => ({
   upgradeCards:   [],
   screenShake:    0,   // current shake intensity; consumed + decayed by DungeonGrid
 
+  // Plan-phase analysis overlays (reset to false when wave starts)
+  showPathPreview: false,
+  showCoverageMap: false,
+
   currentWaveConfig: () => WAVE_CONFIGS[get().waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1],
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -94,6 +98,8 @@ export const useGameStore = create((set, get) => ({
   },
   selectTool(id)  { set({ selectedTool: id }) },
   selectCategory(cat) { set({ selectedCategory: cat, selectedTool: null }) },
+  togglePathPreview()  { set(s => ({ showPathPreview: !s.showPathPreview })) },
+  toggleCoverageMap()  { set(s => ({ showCoverageMap: !s.showCoverageMap })) },
 
   placeTile(col, row) {
     const { grid, selectedTool, gold, unlockedTools, phase } = get()
@@ -189,6 +195,8 @@ export const useGameStore = create((set, get) => ({
       goldStolenThisWave: 0,
       trapTimers: {},
       attackFlashes: [],
+      showPathPreview: false,
+      showCoverageMap: false,
     })
 
     let lastTime = performance.now()

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { WAVE_CONFIGS, HERO_TYPES } from '../game/constants.js'
 import { selectSynergyComment } from '../game/gerald.js'
+import { estimateSurvival, getImmunityWarnings, HERO_PATH_COLORS } from '../game/analysis.js'
 import DungeonGrid from './DungeonGrid.jsx'
 import ToolPalette from './ToolPalette.jsx'
 import BattleLog from './BattleLog.jsx'
@@ -47,29 +48,44 @@ export default function GameScreen() {
 }
 
 function PlanHints() {
-  const waveIndex  = useGameStore(s => s.waveIndex)
-  const grid       = useGameStore(s => s.grid)
+  const waveIndex        = useGameStore(s => s.waveIndex)
+  const grid             = useGameStore(s => s.grid)
+  const showPathPreview  = useGameStore(s => s.showPathPreview)
+  const showCoverageMap  = useGameStore(s => s.showCoverageMap)
+  const togglePathPreview = useGameStore(s => s.togglePathPreview)
+  const toggleCoverageMap = useGameStore(s => s.toggleCoverageMap)
+
   const nextWave   = WAVE_CONFIGS[waveIndex]
   const nextHeroes = nextWave?.heroes ?? []
+  const uniqueHeroIds = [...new Set(nextHeroes)]
 
-  // Recompute Gerald's synergy observation whenever the grid or wave changes.
-  // selectSynergyComment is O(grid size) so memoisation is just cleanliness.
+  // Synergy comment
   const synergy = useMemo(
     () => selectSynergyComment(grid, nextHeroes),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [grid, waveIndex]
   )
 
+  // Threat assessment — survivability per hero type, memoised on grid change
+  const threatData = useMemo(() => uniqueHeroIds.map(heroId => ({
+    heroId,
+    survival:  estimateSurvival(heroId, grid),
+    warnings:  getImmunityWarnings(heroId, grid),
+    count:     nextHeroes.filter(h => h === heroId).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  })), [grid, waveIndex])
+
   return (
     <div style={styles.hints}>
+      {/* Incoming threat list */}
       <div style={styles.hintsHeader}>⚠ INCOMING THREAT</div>
       {nextWave && (
         <>
           <p style={styles.hintsWaveName}>{nextWave.label}</p>
           <div style={styles.heroListIncoming}>
-            {[...new Set(nextWave.heroes)].map(heroId => {
+            {uniqueHeroIds.map(heroId => {
               const hero  = HERO_TYPES[heroId]
-              const count = nextWave.heroes.filter(h => h === heroId).length
+              const count = nextHeroes.filter(h => h === heroId).length
               return (
                 <div key={heroId} style={styles.incomingHero}>
                   <span style={{ fontSize: '1.2rem' }}>{hero.emoji}</span>
@@ -84,13 +100,89 @@ function PlanHints() {
         </>
       )}
 
-      <div style={{ marginTop: '1.5rem', ...styles.hintsHeader }}>📖 CONTROLS</div>
+      {/* Threat assessment bars */}
+      {threatData.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <div style={styles.hintsHeader}>🎯 THREAT LEVEL</div>
+          <div style={styles.threatList}>
+            {threatData.map(({ heroId, survival, warnings, count }) => {
+              const hero    = HERO_TYPES[heroId]
+              const color   = HERO_PATH_COLORS[heroId] ?? '#aaa'
+              const pct     = Math.round(survival * 100)
+              const danger  = survival > 0.65
+              return (
+                <div key={heroId} style={styles.threatRow}>
+                  <div style={styles.threatHeader}>
+                    <span style={{ fontSize: '0.9rem' }}>{hero.emoji}</span>
+                    <span style={{ ...styles.threatName, color }}>
+                      {hero.label}{count > 1 ? ` ×${count}` : ''}
+                    </span>
+                    <span style={{
+                      ...styles.threatPct,
+                      color: danger ? '#e06040' : '#60c060',
+                    }}>{pct}%</span>
+                  </div>
+                  <div style={styles.threatTrack}>
+                    <div style={{
+                      ...styles.threatFill,
+                      width: `${pct}%`,
+                      background: danger
+                        ? `linear-gradient(90deg, #8b1a1a, ${color}88)`
+                        : `linear-gradient(90deg, #1a5a1a, ${color}88)`,
+                    }} />
+                  </div>
+                  {warnings.length > 0 && (
+                    <div style={styles.threatWarnings}>
+                      {warnings.map(w => (
+                        <span key={w} style={styles.warnBadge}>⚠ {w}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Analysis tool toggles */}
+      <div style={{ marginTop: '1rem' }}>
+        <div style={styles.hintsHeader}>🔍 ANALYSIS TOOLS</div>
+        <div style={styles.toggleRow}>
+          <button
+            style={{ ...styles.toggleBtn, ...(showPathPreview ? styles.toggleBtnOn : {}) }}
+            onClick={togglePathPreview}
+            title="Show colour-coded hero route on the grid"
+          >
+            👁 Paths
+          </button>
+          <button
+            style={{ ...styles.toggleBtn, ...(showCoverageMap ? styles.toggleBtnOn : {}) }}
+            onClick={toggleCoverageMap}
+            title="Highlight covered (green) and uncovered (red) path tiles"
+          >
+            🗺 Coverage
+          </button>
+        </div>
+        {showCoverageMap && (
+          <p style={styles.toggleHint}>
+            Green = tower coverage · Red = undefended path
+          </p>
+        )}
+        {showPathPreview && (
+          <p style={styles.toggleHint}>
+            Coloured lines show each hero type's route
+          </p>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div style={{ marginTop: '1rem', ...styles.hintsHeader }}>📖 CONTROLS</div>
       <div style={styles.controlsList}>
         {[
           ['Left click', 'Place selected tool'],
           ['Right click', 'Sell tile (50% refund)'],
-          ['Select tool', 'Click tool then click grid'],
-          ['During wave', 'Still place & sell tiles'],
+          ['During wave', '⚔ costs from War Chest'],
           ['⚔ Send Them In', 'Begin the wave'],
         ].map(([key, val]) => (
           <div key={key} style={styles.controlRow}>
@@ -100,7 +192,7 @@ function PlanHints() {
         ))}
       </div>
 
-      {/* Gerald's synergy / threat assessment */}
+      {/* Gerald's synergy assessment */}
       {synergy && (
         <div style={styles.geraldAssessment}>
           <div style={styles.hintsHeader}>💀 GERALD'S ASSESSMENT</div>
@@ -227,5 +319,61 @@ const styles = {
     background: 'rgba(232,196,74,0.04)',
     border: '1px solid rgba(232,196,74,0.1)',
     borderRadius: 5,
+  },
+  // Threat assessment
+  threatList: {
+    display: 'flex', flexDirection: 'column', gap: '0.45rem',
+  },
+  threatRow: {
+    display: 'flex', flexDirection: 'column', gap: '0.15rem',
+  },
+  threatHeader: {
+    display: 'flex', alignItems: 'center', gap: '0.3rem',
+  },
+  threatName: {
+    flex: 1,
+    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.03em',
+  },
+  threatPct: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', fontWeight: 700,
+    minWidth: 32, textAlign: 'right',
+  },
+  threatTrack: {
+    height: 4, background: '#1a1428', borderRadius: 2, overflow: 'hidden',
+  },
+  threatFill: {
+    height: '100%', borderRadius: 2, transition: 'width 0.4s ease',
+  },
+  threatWarnings: {
+    display: 'flex', flexWrap: 'wrap', gap: '0.2rem',
+  },
+  warnBadge: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.48rem', letterSpacing: '0.05em',
+    color: '#e08030', background: 'rgba(200,100,20,0.12)',
+    border: '1px solid rgba(200,100,20,0.25)',
+    borderRadius: 3, padding: '1px 4px',
+  },
+  // Toggle buttons
+  toggleRow: {
+    display: 'flex', gap: '0.4rem', marginTop: '0.4rem',
+  },
+  toggleBtn: {
+    flex: 1,
+    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.05em',
+    padding: '0.4rem 0.3rem',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 5, cursor: 'pointer',
+    color: 'var(--text-muted)', transition: 'all 0.15s',
+  },
+  toggleBtnOn: {
+    background: 'rgba(232,196,74,0.12)',
+    border: '1px solid rgba(232,196,74,0.4)',
+    color: 'var(--gold-bright)',
+  },
+  toggleHint: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.7rem', color: 'var(--text-muted)',
+    marginTop: '0.3rem', lineHeight: 1.4,
   },
 }
