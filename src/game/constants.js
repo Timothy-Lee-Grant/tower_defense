@@ -404,6 +404,41 @@ export const HERO_TYPES = {
     selfHealRate: 20,
     goldSpeedMult: 1.0,
   },
+
+  // ── Tier 6 heroes (waves 12–15) ───────────────────────────────────────────
+  engineer: {
+    id: 'engineer', label: 'Engineer', emoji: '🔧',
+    hp: 350, speed: 0.95, color: '#b87820',
+    description: 'Disables a random off-path tower for 10 s with every step. Carves a dead zone through heavily-towered dungeons.',
+    canDisarm: false, heals: false,
+    disablesTowers: true,
+    goldSpeedMult: 0.9,
+  },
+  phantom: {
+    id: 'phantom', label: 'Phantom', emoji: '👁️',
+    hp: 180, speed: 1.8, color: '#7a9abf',
+    description: 'Immune to poison, slow, and fire. Only takes damage from physical attacks (spikes, boulders, darts, skeletons, slimes). Magic is useless.',
+    canDisarm: false, heals: false,
+    immuneToSlow: true, immuneToPoison: true, fireResist: 0,
+    physicalOnly: true,
+    goldSpeedMult: 1.1,
+  },
+  medic: {
+    id: 'medic', label: 'Medic', emoji: '➕',
+    hp: 150, speed: 1.0, color: '#e8e8f8',
+    description: 'Resurrects fallen heroes within 3 tiles — revives each ally once at 40% HP after a 3 s delay. Kill the Medic first.',
+    canDisarm: false, heals: false,
+    canRevive: true,
+    goldSpeedMult: 0.95,
+  },
+  crusader: {
+    id: 'crusader', label: 'Crusader', emoji: '✝️',
+    hp: 400, speed: 1.1, color: '#d4c060',
+    description: 'Blessed by a deity — takes only 50% damage from all creature towers (skeletons, slimes, wraiths, bats, trolls). Forces reliance on traps and magic.',
+    canDisarm: false, heals: false,
+    monsterResist: 0.5,
+    goldSpeedMult: 0.85,
+  },
 }
 
 // ── Wave Compositions ──────────────────────────────────────────────────────
@@ -449,15 +484,21 @@ export const WAVE_CONFIGS = [
   // now face a hero that neutralises their on-path investments.
   { wave: 11, hpMult: 5.5, gold: 440, label: 'The Warlord Leads the Charge',
     heroes: ['warlord','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric','regenerator'] },
-  { wave: 12, hpMult: 6.5, gold: 480, label: 'The Veteran Warband',
-    heroes: ['warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'] },
+  // Engineer debuts — tower-heavy dungeons suddenly have gaps carved through them.
+  { wave: 12, hpMult: 6.5, gold: 480, label: 'They Sent a Saboteur',
+    heroes: ['engineer','warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'] },
 
-  // ── Tier 5: Near-Impossible (waves 13–14) ────────────────────────────────
+  // ── Tier 5: Near-Impossible (waves 13–15) ────────────────────────────────
   // Archmage + arcane host. Full roster pressure — dungeon ~8500–11000g invested.
-  { wave: 13, hpMult: 7.5, gold: 500, label: 'The Arcane Host',
-    heroes: ['archmage','warlord','warlord','berserker','berserker','ranger','ranger','knight','paladin','cleric','regenerator','thief'] },
+  // Phantom forces players who built magic-heavy to reckon with physical damage.
+  { wave: 13, hpMult: 7.5, gold: 500, label: 'The Untouchable',
+    heroes: ['phantom','archmage','warlord','warlord','berserker','berserker','ranger','ranger','knight','paladin','cleric','regenerator','thief'] },
+  // Medic turns every kill into a question mark — kill it first or watch heroes revive.
   { wave: 14, hpMult: 9.0, gold: 550, label: "The Champion's Crusade",
-    heroes: ['champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'] },
+    heroes: ['medic','champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'] },
+  // Crusader: blessed against creatures — traps and magic are the only answer.
+  { wave: 15, hpMult: 11.0, gold: 600, label: 'The Holy Siege',
+    heroes: ['crusader','crusader','medic','champion','archmage','archmage','warlord','warlord','engineer','berserker','ranger','ranger','cleric','paladin','regenerator'] },
 ]
 
 // ── Economy ────────────────────────────────────────────────────────────────
@@ -497,7 +538,7 @@ export const DIFFICULTIES = {
 
 export const SELL_REFUND_RATE      = 0.5
 export const BANK_COST_MULT        = 1.5   // war-chest emergency-placement premium
-export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100, warlord: 60, regenerator: 50 }
+export const HERO_KILL_GOLD        = { knight: 30, mage: 40, thief: 35, paladin: 50, berserker: 45, ranger: 35, cleric: 55, archmage: 60, champion: 100, warlord: 60, regenerator: 50, engineer: 55, phantom: 50, medic: 70, crusader: 65 }
 export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero who has the treasure
 export const TREASURE_MAX_HP       = 300
 export const TREASURE_HERO_DAMAGE  = 80

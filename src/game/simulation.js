@@ -13,11 +13,14 @@
 //   7. Off-path tower range attacks (second full pass)
 
 import {
-  TILE, TILE_SIZE,
+  TILE, TILE_SIZE, TOOL_CATEGORY,
   HERO_KILL_GOLD, GOLD_CARRYING_BONUS,
   TREASURE_HERO_DAMAGE, HERO_SPAWN_STAGGER_MS,
   PATH_TILES, DUNGEON_TOOLS,
 } from './constants.js'
+
+// Tiles that count as "physical" damage — the only sources that hurt the Phantom.
+const PHYSICAL_TILES = new Set([TILE.SPIKE, TILE.BOULDER, TILE.DART, TILE.SKELETON, TILE.SLIME])
 
 // ── Hero factory ───────────────────────────────────────────────────────────
 
@@ -69,6 +72,13 @@ export function createHero(heroType, spawnIndex, hpMult = 1) {
     selfHealRate:    +((heroType.selfHealRate  ?? 0)  * healScale).toFixed(1),
     partyHealRate:   +((heroType.partyHealRate ?? 0)  * healScale).toFixed(1),
     curseStacks:     0,
+    // Tier 6 hero flags
+    monsterResist:   heroType.monsterResist   ?? 0,    // Crusader: fraction damage from MONSTERS
+    physicalOnly:    heroType.physicalOnly     ?? false, // Phantom: immune to all non-physical
+    disablesTowers:  heroType.disablesTowers  ?? false, // Engineer: disables a tower each step
+    canRevive:       heroType.canRevive        ?? false, // Medic: revives nearby dead heroes
+    pendingRevival:  {},    // heroId → msRemaining (Medic mechanic)
+    revivedHeroes:   [],    // heroIds already revived (once per hero)
   }
 }
 
@@ -80,6 +90,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
   let treasureDamage = 0
   let goldEarned     = 0
   const updatedHeroes = []
+  const updatedTimers = { ...trapTimers }   // shared by Pass 1 (on-path traps) and Pass 2 (towers)
 
   // ── Pass 1: hero movement and status effects ───────────────────────────
   for (let hero of heroes) {
@@ -120,7 +131,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
 
     // Tile DoT: lava (15 HP/s) and tar (15 HP/s Berserker-only)
     const curTileId = grid[hero.row]?.[hero.col]
-    if (curTileId === TILE.LAVA) {
+    if (curTileId === TILE.LAVA && !hero.physicalOnly) {
+      // Phantom (physicalOnly) is immune to all magical/elemental damage incl. lava
       const dmg = 15 * (deltaMs / 1000) * (1 - hero.damageReduction)
       hero = { ...hero, hp: hero.hp - dmg }
       events.push({ type: 'lava_damage', heroId: hero.id })
@@ -217,8 +229,30 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         arrivedId !== TILE.DOOR     &&
         arrivedId !== TILE.TAR        // tar is handled as continuous DoT above
       ) {
-        const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers)
-        hero = result.hero
+        // Phantom skips all non-physical on-path traps
+        if (!hero.physicalOnly || PHYSICAL_TILES.has(arrivedId)) {
+          const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers)
+          hero = result.hero
+        }
+      }
+
+      // Engineer: disable a random off-path tower within 5 tiles for 10 s
+      if (hero.disablesTowers) {
+        const nearby = []
+        for (let er = 0; er < grid.length; er++) {
+          for (let ec = 0; ec < grid[er].length; ec++) {
+            const tid = grid[er][ec]
+            const tool = DUNGEON_TOOLS.find(t => t.id === tid && t.range && t.attackSpeed)
+            if (!tool) continue
+            const d = Math.sqrt((ec - hero.col) ** 2 + (er - hero.row) ** 2)
+            if (d <= 5) nearby.push({ ec, er, key: `tower_disabled_${ec},${er}` })
+          }
+        }
+        if (nearby.length > 0) {
+          const target = nearby[Math.floor(Math.random() * nearby.length)]
+          updatedTimers[target.key] = 10000
+          events.push({ type: 'engineer_disable', col: target.ec, row: target.er, label: hero.label })
+        }
       }
 
       // Escape check — completed the full loop
@@ -250,8 +284,51 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
     updatedHeroes.push(hero)
   }
 
+  // ── Pass 1.5: Medic revival processing ───────────────────────────────────
+  // Medics tick down pending revival timers and bring heroes back to life.
+  for (let mi = 0; mi < updatedHeroes.length; mi++) {
+    const medic = updatedHeroes[mi]
+    if (!medic.canRevive || medic.state !== 'moving' || !medic.spawned) continue
+
+    const newPending  = { ...medic.pendingRevival }
+    const newRevived  = [...medic.revivedHeroes]
+
+    // 1. Check for newly dead heroes within 3 tiles to queue for revival
+    for (const h of updatedHeroes) {
+      if (h.state !== 'dead') continue
+      if (newRevived.includes(h.id)) continue
+      if (newPending[h.id] !== undefined) continue
+      const dist = Math.sqrt((h.col - medic.col) ** 2 + (h.row - medic.row) ** 2)
+      if (dist <= 3) {
+        newPending[h.id] = 3000   // 3 s revival countdown
+        events.push({ type: 'medic_revive_queued', label: h.label })
+      }
+    }
+
+    // 2. Tick down timers and trigger revivals
+    for (const heroId of Object.keys(newPending)) {
+      newPending[heroId] -= deltaMs
+      if (newPending[heroId] <= 0) {
+        const idx = updatedHeroes.findIndex(h => h.id === heroId)
+        if (idx >= 0 && updatedHeroes[idx].state === 'dead') {
+          const target = updatedHeroes[idx]
+          updatedHeroes[idx] = {
+            ...target,
+            state:  'moving',
+            hp:     Math.round(target.maxHp * 0.4),
+            poisoned: false, slowed: false, slowTimer: 0,
+          }
+          events.push({ type: 'medic_revived', label: target.label })
+          newRevived.push(heroId)
+        }
+        delete newPending[heroId]
+      }
+    }
+
+    updatedHeroes[mi] = { ...medic, pendingRevival: newPending, revivedHeroes: newRevived }
+  }
+
   // ── Pass 2: off-path tower range attacks ───────────────────────────────
-  const updatedTimers = { ...trapTimers }
 
   for (let r = 0; r < grid.length; r++) {
     for (let c = 0; c < grid[r].length; c++) {
@@ -259,6 +336,13 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
       // Require attackSpeed to exclude Mimic (handled in its own loop below)
       const toolDef = DUNGEON_TOOLS.find(t => t.id === tileId && t.range && t.attackSpeed)
       if (!toolDef) continue
+
+      // Engineer disable: tick down and skip this tower if still disabled
+      const disableKey = `tower_disabled_${c},${r}`
+      if ((updatedTimers[disableKey] ?? 0) > 0) {
+        updatedTimers[disableKey] = Math.max(0, updatedTimers[disableKey] - deltaMs)
+        continue
+      }
 
       const key = `tower_${c},${r}`
       updatedTimers[key] = (updatedTimers[key] ?? toolDef.attackSpeed) + deltaMs
@@ -305,6 +389,12 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers) {
         const h = updatedHeroes[idx]
 
         let dmg = toolDef.damage
+        // Phantom: only takes damage from physical tiles — everything else is zeroed
+        if (h.physicalOnly && !PHYSICAL_TILES.has(tileId)) dmg = 0
+        // Crusader: 50% damage from creature/monster towers
+        if (h.monsterResist > 0 && toolDef.category === TOOL_CATEGORY.MONSTERS) {
+          dmg = Math.round(dmg * (1 - h.monsterResist))
+        }
         // Elemental resistances
         if (tileId === TILE.FIRE) dmg = Math.round(dmg * (h.fireResist ?? 1))
         // Flat damage reduction (champion)

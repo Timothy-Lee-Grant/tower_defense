@@ -2322,6 +2322,314 @@ export function drawGargoyleTile(ctx, tx, ty, t) {
 }
 
 
+// ── Tier 6 Hero Sprites (7.3) ────────────────────────────────────────────────
+
+// Engineer — tool-belt, goggles, wrench
+export function drawEngineer(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.006) * 1.5
+  const lLeg = swing(t, 0.008) * 5
+  const rLeg = -lLeg
+  const wrenchSwing = swing(t, 0.004) * 8
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 10, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // legs — work trousers
+  ctx.fillStyle = '#4a3820'
+  ctx.fillRect(-5, 6 + lLeg * 0.3, 4, 11); ctx.fillRect(1, 6 + rLeg * 0.3, 4, 11)
+  ctx.fillStyle = '#3a2810'
+  ctx.fillRect(-6, 15 + lLeg * 0.3, 5, 3); ctx.fillRect(1, 15 + rLeg * 0.3, 5, 3)
+
+  // body — leather apron over shirt
+  ctx.fillStyle = '#6a5030'
+  ctx.fillRect(-8, -7, 16, 14)
+  ctx.fillStyle = '#c87820'  // amber apron
+  ctx.fillRect(-5, -5, 10, 12)
+  // tool belt pockets
+  ctx.fillStyle = '#8a4010'
+  ctx.fillRect(-4, 3, 3, 4); ctx.fillRect(1, 3, 3, 4)
+
+  // wrench in right hand (swings with walk)
+  ctx.fillStyle = '#808080'
+  ctx.save()
+  ctx.translate(14, 0)
+  ctx.rotate((wrenchSwing * Math.PI) / 180)
+  ctx.fillRect(-2, -20, 4, 22)
+  // wrench head
+  ctx.fillRect(-4, -22, 8, 5)
+  ctx.fillRect(-3, -27, 3, 5)
+  ctx.fillRect(0, -27, 3, 5)
+  ctx.restore()
+
+  // left arm
+  ctx.fillStyle = '#6a5030'
+  ctx.fillRect(-17, -6, 7, 10)
+  ctx.fillStyle = '#c8a870'
+  ctx.fillRect(-18, 3, 6, 4)
+
+  // head
+  ctx.fillStyle = '#c8a870'
+  ctx.fillRect(-6, -18, 12, 12)
+  // goggles
+  ctx.fillStyle = '#3a2810'
+  ctx.fillRect(-5, -16, 10, 4)
+  ctx.fillStyle = 'rgba(100,180,255,0.6)'
+  ctx.fillRect(-4, -15, 3, 3); ctx.fillRect(1, -15, 3, 3)
+  // mouth
+  ctx.fillStyle = '#8a6040'
+  ctx.fillRect(-3, -9, 6, 1)
+
+  // hard hat
+  ctx.fillStyle = '#e8a020'
+  ctx.fillRect(-8, -26, 16, 10)
+  ctx.fillRect(-6, -30, 12, 6)
+  // hat brim
+  ctx.fillStyle = '#c88010'
+  ctx.fillRect(-9, -18, 18, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(80,200,80,0.18)'
+    ctx.fillRect(-18, -30, 38, 52)
+  }
+  ctx.restore()
+}
+
+// Phantom — ghostly, translucent, eerie glow
+export function drawPhantom(ctx, cx, cy, t, hero = {}) {
+  const bob   = Math.sin(t * 0.004) * 3      // slow float
+  const pulse = osc(t, 0.003)
+  const drift = Math.sin(t * 0.0025) * 2
+
+  ctx.save()
+  ctx.translate(Math.round(cx + drift), Math.round(cy + bob))
+
+  // outer ethereal haze
+  ctx.fillStyle = `rgba(120,160,220,${0.04 + pulse * 0.06})`
+  ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill()
+
+  // shadow (faint — phantom barely touches the ground)
+  ctx.fillStyle = 'rgba(0,0,0,0.10)'
+  ctx.beginPath(); ctx.ellipse(0, 20, 7, 3, 0, 0, Math.PI * 2); ctx.fill()
+
+  // wispy tail — bottom trails off
+  ctx.fillStyle = `rgba(140,170,230,${0.3 + pulse * 0.2})`
+  ctx.beginPath()
+  ctx.moveTo(-8, 12)
+  ctx.lineTo(8, 12)
+  ctx.lineTo(5, 22)
+  ctx.lineTo(0, 18)
+  ctx.lineTo(-5, 22)
+  ctx.closePath()
+  ctx.fill()
+
+  // robe body — translucent blue-white
+  ctx.fillStyle = `rgba(160,190,240,${0.55 + pulse * 0.15})`
+  ctx.fillRect(-9, -8, 18, 20)
+  // inner shimmer
+  ctx.fillStyle = `rgba(200,220,255,${0.2 + pulse * 0.2})`
+  ctx.fillRect(-6, -6, 12, 16)
+
+  // arms — wispy tendrils
+  ctx.fillStyle = `rgba(150,180,230,${0.5 + pulse * 0.15})`
+  ctx.fillRect(-18, -5, 9, 6); ctx.fillRect(9, -5, 9, 6)
+
+  // head — spectral mask, single glowing eye slit
+  ctx.fillStyle = `rgba(180,210,255,${0.7 + pulse * 0.2})`
+  ctx.fillRect(-7, -21, 14, 14)
+  // dark eye holes
+  ctx.fillStyle = '#0a0a18'
+  ctx.fillRect(-5, -17, 10, 4)
+  // glowing eye
+  ctx.fillStyle = `rgba(100,180,255,${0.7 + pulse * 0.3})`
+  ctx.fillRect(-4, -16, 8, 3)
+  // ethereal glow around head
+  ctx.fillStyle = `rgba(140,180,240,${0.08 + pulse * 0.10})`
+  ctx.beginPath(); ctx.arc(0, -14, 14, 0, Math.PI * 2); ctx.fill()
+
+  // immunity shimmer rings (indicates magic-immune)
+  for (let i = 0; i < 3; i++) {
+    const ring = osc(t - i * 400, 0.002)
+    ctx.strokeStyle = `rgba(160,200,255,${ring * 0.25})`
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.arc(0, 0, 12 + i * 6, 0, Math.PI * 2); ctx.stroke()
+  }
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(80,200,80,0.10)'
+    ctx.fillRect(-18, -25, 38, 52)
+  }
+  ctx.restore()
+}
+
+// Medic — white tunic, red cross, healing satchel
+export function drawMedic(ctx, cx, cy, t, hero = {}) {
+  const bob  = swing(t, 0.006) * 1.5
+  const lLeg = swing(t, 0.008) * 5
+  const rLeg = -lLeg
+  const heal = osc(t, 0.004)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // soft healing aura
+  ctx.fillStyle = `rgba(255,240,240,${0.04 + heal * 0.08})`
+  ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'
+  ctx.beginPath(); ctx.ellipse(0, 18, 10, 4, 0, 0, Math.PI * 2); ctx.fill()
+
+  // legs
+  ctx.fillStyle = '#d0d8e0'
+  ctx.fillRect(-5, 6 + lLeg * 0.3, 4, 11); ctx.fillRect(1, 6 + rLeg * 0.3, 4, 11)
+  ctx.fillStyle = '#a0a8b0'
+  ctx.fillRect(-6, 15 + lLeg * 0.3, 5, 3); ctx.fillRect(1, 15 + rLeg * 0.3, 5, 3)
+
+  // white tunic body
+  ctx.fillStyle = '#f0f4f8'
+  ctx.fillRect(-9, -8, 18, 16)
+  // red cross on chest
+  ctx.fillStyle = '#cc2020'
+  ctx.fillRect(-2, -6, 4, 12)
+  ctx.fillRect(-6, -2, 12, 4)
+
+  // satchel (left side)
+  ctx.fillStyle = '#c8a060'
+  ctx.fillRect(-17, -3, 8, 9)
+  ctx.fillStyle = '#cc2020'  // red cross on satchel
+  ctx.fillRect(-14, -1, 2, 5)
+  ctx.fillRect(-16, 1, 6, 2)
+
+  // right arm
+  ctx.fillStyle = '#f0f4f8'
+  ctx.fillRect(9, -6, 7, 10)
+  ctx.fillStyle = '#c8a870'
+  ctx.fillRect(15, 3, 4, 4)
+
+  // head
+  ctx.fillStyle = '#c8a870'
+  ctx.fillRect(-6, -18, 12, 12)
+  // eyes — kind
+  ctx.fillStyle = '#3a2810'
+  ctx.fillRect(-4, -14, 3, 3); ctx.fillRect(1, -14, 3, 3)
+  ctx.fillStyle = '#5a7090'
+  ctx.fillRect(-3, -13, 2, 2); ctx.fillRect(2, -13, 2, 2)
+  // gentle smile
+  ctx.fillStyle = '#c87060'
+  ctx.fillRect(-3, -9, 6, 2)
+  ctx.fillRect(-2, -8, 4, 1)
+
+  // white cap with red cross
+  ctx.fillStyle = '#f0f4f8'
+  ctx.fillRect(-7, -28, 14, 12)
+  ctx.fillStyle = '#cc2020'
+  ctx.fillRect(-1, -27, 2, 10)
+  ctx.fillRect(-4, -23, 8, 2)
+
+  // pulsing heal + cross particle
+  const hpulse = osc(t, 0.003)
+  ctx.fillStyle = `rgba(255,80,80,${hpulse * 0.4})`
+  ctx.fillRect(-1, -36, 2, 10)
+  ctx.fillRect(-4, -30, 8, 2)
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(80,200,80,0.18)'
+    ctx.fillRect(-18, -30, 38, 52)
+  }
+  ctx.restore()
+}
+
+// Crusader — heavy holy armor, shield with cross, divine aura
+export function drawCrusader(ctx, cx, cy, t, hero = {}) {
+  const bob    = swing(t, 0.005) * 1.2   // heavy, slow walk
+  const lLeg   = swing(t, 0.007) * 4
+  const rLeg   = -lLeg
+  const divine = osc(t, 0.003)
+
+  ctx.save()
+  ctx.translate(Math.round(cx), Math.round(cy + bob))
+
+  // divine blessing aura — golden glow
+  ctx.fillStyle = `rgba(255,220,80,${0.04 + divine * 0.09})`
+  ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.fill()
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'
+  ctx.beginPath(); ctx.ellipse(0, 19, 12, 5, 0, 0, Math.PI * 2); ctx.fill()
+
+  // leg plate armour
+  ctx.fillStyle = '#c8b060'
+  ctx.fillRect(-6, 5 + lLeg * 0.3, 5, 12); ctx.fillRect(1, 5 + rLeg * 0.3, 5, 12)
+  ctx.fillStyle = '#a89040'
+  ctx.fillRect(-7, 14 + lLeg * 0.3, 6, 4); ctx.fillRect(1, 14 + rLeg * 0.3, 6, 4)
+
+  // heavy plate body
+  ctx.fillStyle = '#c0a848'
+  ctx.fillRect(-11, -10, 22, 16)
+  // chest cross engraving
+  ctx.fillStyle = `rgba(255,250,200,${0.4 + divine * 0.4})`
+  ctx.fillRect(-2, -8, 4, 14)
+  ctx.fillRect(-7, -3, 14, 4)
+  // armour sheen
+  ctx.fillStyle = 'rgba(255,250,200,0.12)'
+  ctx.fillRect(-10, -9, 4, 14)
+
+  // kite shield (left side)
+  ctx.fillStyle = '#c0a848'
+  ctx.fillRect(-24, -10, 12, 18)
+  ctx.fillStyle = '#a89040'
+  ctx.fillRect(-23, -9, 10, 16)
+  // cross on shield
+  ctx.fillStyle = `rgba(255,240,150,${0.6 + divine * 0.4})`
+  ctx.fillRect(-19, -7, 2, 12)
+  ctx.fillRect(-23, -2, 10, 2)
+
+  // right gauntlet and sword
+  ctx.fillStyle = '#c0a848'
+  ctx.fillRect(11, -8, 7, 10)
+  ctx.fillStyle = '#888888'
+  ctx.fillRect(17, -26, 3, 28)    // blade
+  ctx.fillStyle = '#c0a848'
+  ctx.fillRect(13, -14, 10, 3)    // crossguard
+  ctx.fillStyle = '#8a6020'
+  ctx.fillRect(17, 2, 3, 6)       // grip
+
+  // head — great helm
+  ctx.fillStyle = '#c0a848'
+  ctx.fillRect(-8, -24, 16, 16)
+  ctx.fillRect(-9, -20, 18, 10)   // visor brim
+  // visor slit
+  ctx.fillStyle = '#1a1408'
+  ctx.fillRect(-6, -18, 12, 4)
+  // glowing eyes through visor
+  ctx.fillStyle = `rgba(255,230,80,${0.6 + divine * 0.4})`
+  ctx.fillRect(-5, -17, 4, 3); ctx.fillRect(1, -17, 4, 3)
+  // plume
+  ctx.fillStyle = '#cc2020'
+  ctx.fillRect(-2, -34, 4, 12)
+  ctx.fillStyle = '#ee4040'
+  ctx.fillRect(-1, -36, 2, 14)
+
+  // divine aura rings
+  for (let i = 0; i < 2; i++) {
+    const ring = osc(t - i * 600, 0.002)
+    ctx.strokeStyle = `rgba(255,220,80,${ring * 0.3})`
+    ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.arc(0, 0, 18 + i * 10, 0, Math.PI * 2); ctx.stroke()
+  }
+
+  if (hero.poisoned) {
+    ctx.fillStyle = 'rgba(80,200,80,0.18)'
+    ctx.fillRect(-24, -36, 52, 60)
+  }
+  ctx.restore()
+}
+
+
 // ── Sprite maps ──────────────────────────────────────────────────────────────
 
 export const HERO_SPRITES = {
@@ -2336,6 +2644,10 @@ export const HERO_SPRITES = {
   champion:    drawChampion,
   warlord:     drawWarlord,
   regenerator: drawRegenerator,
+  engineer:    drawEngineer,
+  phantom:     drawPhantom,
+  medic:       drawMedic,
+  crusader:    drawCrusader,
 }
 
 // ── New Off-Path Tower Sprites (7.2) ─────────────────────────────────────────
