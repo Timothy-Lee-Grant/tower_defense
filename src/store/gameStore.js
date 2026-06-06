@@ -557,6 +557,18 @@ export const useGameStore = create((set, get) => ({
       initLog.push(`${globalEvent.emoji} EVENT: ${globalEvent.name} — ${globalEvent.description}`)
     }
 
+    // ── Feature 13: announce active AI adaptations ─────────────────────────────
+    if (memorizedDangerKeys.size > 0) {
+      initLog.push(
+        `🧠 Intel: Heroes have learned from prior waves — they rush through ${memorizedDangerKeys.size} trap zone${memorizedDangerKeys.size !== 1 ? 's' : ''} at increased speed.`
+      )
+    }
+    if (warlordSpeedBoostActive && heroIds.includes('warlord')) {
+      initLog.push(
+        `🪖 Warlord adaptation: Veteran Warlords charge trapped corridors faster after clearing them repeatedly.`
+      )
+    }
+
     set({
       phase:           PHASE.WAVE,
       heroes,
@@ -869,6 +881,15 @@ export const useGameStore = create((set, get) => ({
         const newGrid = get().grid.map(r => [...r])
         result.spikeRespawns.forEach(({ col: c, row: r }) => {
           newGrid[r][c] = TILE.SPIKE
+        })
+        set({ grid: newGrid })
+      }
+
+      // Handle Iron Crusher (T3 boulder) respawns
+      if (result.boulderRespawns && result.boulderRespawns.length > 0) {
+        const newGrid = get().grid.map(r => [...r])
+        result.boulderRespawns.forEach(({ col: c, row: r }) => {
+          newGrid[r][c] = TILE.BOULDER
         })
         set({ grid: newGrid })
       }

@@ -258,6 +258,22 @@ const HERO_CALLOUTS = {
     '"The Regenerator heals faster than standard damage output. Sustained fire is the only viable answer. Do not stop."',
     '"Regenerator confirmed. HP regenerates continuously. Single-hit traps are wasted here. Sustained damage only."',
   ],
+  engineer: [
+    '"The Engineer has entered. He disables a random off-path tower with every tile he crosses. Your coverage is being dismantled in real time."',
+    '"Engineer confirmed. He deactivates towers systematically. Watch the coverage gaps. Gerald suggests not having gaps."',
+  ],
+  phantom: [
+    '"A Phantom. Immune to poison, fire, and slowing. Only physical damage — spikes, boulders, darts, melee — will register. Magic infrastructure: decorative."',
+    '"The Phantom. Elemental defences are non-functional against this target. Physical contact only. Gerald has underlined this in the operational briefing."',
+  ],
+  medic: [
+    '"The Medic. She revives heroes who die within three tiles of her position. Heroes you killed may not remain killed. Eliminate her first. This is not negotiable."',
+    '"Medic confirmed. Dead heroes near her are a temporary condition. Priority target. The kill count is a lie until she is gone."',
+  ],
+  crusader: [
+    '"A Crusader. Divinely blessed. Monster attacks deal half damage against this target. Your creature army is performing at fifty percent effectiveness. Gerald considers this a management issue."',
+    '"The Crusader. Monster-resistant. Traps and magical towers are your only reliable options. The skeleton operating budget was not designed for this."',
+  ],
 }
 
 export function getHeroCallout(heroType) {

@@ -705,7 +705,21 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
     }
   }
 
-  return { heroes: updatedHeroes, events, treasureDamage, goldEarned, trapTimers: updatedTimers, spikeRespawns }
+  // Boulder respawn (Iron Crusher T3): tick the countdown and queue restore.
+  // The timer is set in handleOnPathTrap; gameStore removes the tile immediately.
+  // Here we tick down each active timer and queue restoration when it hits 0.
+  const boulderRespawns = []
+  for (const key of Object.keys(updatedTimers)) {
+    if (!key.startsWith('boulder_respawn_')) continue
+    updatedTimers[key] = Math.max(0, updatedTimers[key] - deltaMs)
+    if (updatedTimers[key] === 0) {
+      const coords = key.replace('boulder_respawn_', '').split(',').map(Number)
+      boulderRespawns.push({ col: coords[0], row: coords[1] })
+      delete updatedTimers[key]
+    }
+  }
+
+  return { heroes: updatedHeroes, events, treasureDamage, goldEarned, trapTimers: updatedTimers, spikeRespawns, boulderRespawns }
 }
 
 // ── On-path trap interactions ──────────────────────────────────────────────
