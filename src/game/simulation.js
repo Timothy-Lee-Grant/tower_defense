@@ -16,7 +16,7 @@ import {
   TILE, TILE_SIZE, TOOL_CATEGORY,
   HERO_KILL_GOLD, GOLD_CARRYING_BONUS,
   TREASURE_HERO_DAMAGE, HERO_SPAWN_STAGGER_MS,
-  PATH_TILES, DUNGEON_TOOLS, getEffectiveTool,
+  PATH_TILES, DUNGEON_TOOLS, HERO_TYPES, getEffectiveTool,
 } from './constants.js'
 
 // Tiles that count as "physical" damage — the only sources that hurt the Phantom.
@@ -90,6 +90,68 @@ export function createHero(heroType, spawnIndex, hpMult = 1, pathTiles = PATH_TI
     canRevive:       heroType.canRevive        ?? false, // Medic: revives nearby dead heroes
     pendingRevival:  {},    // heroId → msRemaining (Medic mechanic)
     revivedHeroes:   [],    // heroIds already revived (once per hero)
+  }
+}
+
+// ── Boss hero factory ──────────────────────────────────────────────────────
+// Creates a boss hero from a BOSS_TYPES entry.
+// effectiveMult: the wave's difficulty-adjusted hpMult (same as createHero receives).
+// Boss final HP = bossType.hp × effectiveMult × bossType.hpMultiplier.
+export function createBossHero(bossType, effectiveMult = 1, pathTiles = PATH_TILES) {
+  const scaledHp = Math.round(bossType.hp * effectiveMult * bossType.hpMultiplier)
+  return {
+    id:               `boss_${Date.now()}_${bossType.id}`,
+    type:             bossType.id,
+    bossBaseType:     bossType.bossBaseType,   // for sprite lookup
+    bossName:         bossType.name,
+    bossAuraColor:    bossType.auraColor,
+    bossDeathLine:    bossType.deathLine,
+    bossEscapeLine:   bossType.escapeLine,
+    isBoss:           true,
+    label:            bossType.name,
+    emoji:            bossType.emoji,
+    color:            bossType.color,
+    hp:               scaledHp,
+    maxHp:            scaledHp,
+    baseMaxHp:        scaledHp,
+    speed:            bossType.speed,
+    canDisarm:        bossType.canDisarm ?? false,
+    heals:            false,
+    stasisTimer:        0,
+    distractedTimer:    0,
+    distractedByMimics: [],
+    fireResist:       bossType.physicalOnly ? 0 : (bossType.fireResist ?? 1),
+    goldSpeedMult:    bossType.goldSpeedMult ?? 1,
+    col:              pathTiles[0].col,
+    row:              pathTiles[0].row,
+    x:                pathTiles[0].col * TILE_SIZE + TILE_SIZE / 2,
+    y:                pathTiles[0].row * TILE_SIZE + TILE_SIZE / 2,
+    pathIndex:        0,
+    state:            'moving',
+    poisoned:         false,
+    slowed:           false,
+    slowTimer:        0,
+    hasGold:          false,
+    spawnDelay:       500,   // brief pause before boss enters
+    spawned:          false,
+    goldValue:        bossType.killGold ?? 200,
+    immuneToSlow:     bossType.immuneToSlow    ?? false,
+    immuneToPoison:   bossType.immuneToPoison  ?? false,
+    damageReduction:  bossType.damageReduction ?? 0,
+    physicalOnly:     bossType.physicalOnly    ?? false,
+    enrageable:       bossType.enrageable      ?? false,
+    enraged:          false,
+    bossTreasureDamageMult: bossType.bossTreasureDamageMult ?? 1,
+    selfHealRate:     bossType.selfHealRate    ?? 0,
+    partyHealRate:    0,
+    healAmount:       0,
+    curseStacks:      0,
+    monsterResist:    0,
+    disablesTowers:   false,
+    canRevive:        false,
+    pendingRevival:   {},
+    revivedHeroes:    [],
+    boulderResist:    bossType.boulderResist   ?? false,
   }
 }
 
@@ -199,9 +261,15 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       hero = { ...hero, slowed: true, slowTimer: Math.max(hero.slowTimer, 2000) }
     }
 
-    // Self-regen (mage, archmage)
+    // Self-regen (mage, archmage, Eternal Champion)
     if (hero.selfHealRate > 0 && hero.hp < hero.maxHp) {
       hero = { ...hero, hp: Math.min(hero.maxHp, hero.hp + hero.selfHealRate * (deltaMs / 1000)) }
+    }
+
+    // Boss enrage — Berserker King: at 50% HP, speed doubles and treasure damage triples
+    if (hero.enrageable && !hero.enraged && hero.hp <= hero.baseMaxHp * 0.5) {
+      hero = { ...hero, enraged: true, speed: hero.speed * 2 }
+      events.push({ type: 'boss_enraged', heroId: hero.id, label: hero.label })
     }
 
     // Soft party heal (mage, archmage) — slight aura for adjacent allies
@@ -238,7 +306,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
     if (!nextTile) {
       // Already at the last tile (entrance = escape point)
-      events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold })
+      events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold,
+        isBoss: hero.isBoss ?? false, bossLine: hero.bossEscapeLine })
       updatedHeroes.push({ ...hero, state: 'escaped' })
       continue
     }
@@ -272,8 +341,10 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
       // Gold pickup — fires exactly once
       if (arrivedId === TILE.TREASURE && !hero.hasGold) {
+        const dmgMult = (hero.enraged && hero.bossTreasureDamageMult)
+          ? hero.bossTreasureDamageMult : 1
         hero = { ...hero, hasGold: true }
-        treasureDamage += TREASURE_HERO_DAMAGE
+        treasureDamage += TREASURE_HERO_DAMAGE * dmgMult
         events.push({ type: 'treasure_reached', hero: hero.id, label: hero.label })
       }
 
@@ -315,7 +386,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
       // Escape check — completed the full loop
       if (hero.pathIndex >= pathTiles.length - 1) {
-        events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold })
+        events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: hero.hasGold,
+          isBoss: hero.isBoss ?? false, bossLine: hero.bossEscapeLine })
         updatedHeroes.push({ ...hero, state: 'escaped' })
         continue
       }
@@ -334,6 +406,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       events.push({
         type: 'hero_killed', hero: hero.id, heroType: hero.type, label: hero.label,
         gold: killGold, hadGold: hero.hasGold, killedBy: 'path',
+        isBoss: hero.isBoss ?? false, bossLine: hero.bossDeathLine,
       })
       updatedHeroes.push({ ...hero, state: 'dead', hp: 0 })
       continue
@@ -496,6 +569,7 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
           events.push({
             type: 'hero_killed', hero: updatedHeroes[idx].id, heroType: updatedHeroes[idx].type,
             label: updatedHeroes[idx].label, gold: killGold, hadGold: updatedHeroes[idx].hasGold, killedBy: 'tower',
+            isBoss: updatedHeroes[idx].isBoss ?? false, bossLine: updatedHeroes[idx].bossDeathLine,
           })
           updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
         }
@@ -540,7 +614,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
             const killGold = (h.goldValue + (h.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
             goldEarned += killGold
             events.push({ type: 'hero_killed', hero: h.id, heroType: h.type, label: h.label,
-              gold: killGold, hadGold: h.hasGold, killedBy: 'tower' })
+              gold: killGold, hadGold: h.hasGold, killedBy: 'tower',
+              isBoss: h.isBoss ?? false, bossLine: h.bossDeathLine })
             updatedHeroes[i] = { ...updatedHeroes[i], state: 'dead', hp: 0 }
           }
         }

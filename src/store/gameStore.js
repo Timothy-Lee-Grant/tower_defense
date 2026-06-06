@@ -3,10 +3,10 @@ import { create } from 'zustand'
 import {
   GRID_COLS, GRID_ROWS, TILE, DUNGEON_TOOLS,
   SELL_REFUND_RATE, BANK_COST_MULT, WAVE_CONFIGS,
-  HERO_TYPES, DIFFICULTIES, UPGRADE_TIERS,
+  HERO_TYPES, DIFFICULTIES, UPGRADE_TIERS, BOSS_TYPES,
   DUNGEON_LAYOUTS, CAMPAIGN_NODES, CAMPAIGN_MODIFIERS, buildLayoutData,
 } from '../game/constants.js'
-import { createHero, simulationTick } from '../game/simulation.js'
+import { createHero, createBossHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
 import { getHeroCallout } from '../game/gerald.js'
 import { getEventForWave, getRandomEvent, GLOBAL_EVENTS } from '../game/globalEvents.js'
@@ -82,6 +82,12 @@ export const useGameStore = create((set, get) => ({
   showEventOverlay:   false,  // show dramatic announcement popup
   caveInTiles:        [],     // [{col,row}] — off-path towers that will collapse mid-wave
   holyGroundZone:     null,   // {minCol,minRow,maxCol,maxRow} — no-placement zone this wave
+
+  // ── Boss Heroes (feature 12) ──────────────────────────────────────────────
+  bossSpawnedThisWave:       false,  // prevent double-spawn
+  activeBossName:            null,   // shown as nameplate in HUD while boss is alive
+  bossEntranceFanfareEnd:    0,      // performance.now() timestamp when fanfare ends
+  bossEntranceFanfareColor:  null,   // color of canvas flash
 
   // ── Dark Lord's Demands (feature 11) ──────────────────────────────────────
   darkLordDemandMet:         null,   // null=pending, true/false after endWave()
@@ -353,6 +359,38 @@ export const useGameStore = create((set, get) => ({
     audio.play('upgrade_unlock')
   },
 
+  // ── Spawn boss after regular heroes resolve ────────────────────────────────
+  spawnBoss(bossId) {
+    const { waveIndex, heroes, layoutData } = get()
+    const bossType = BOSS_TYPES[bossId]
+    if (!bossType) return
+
+    const waveConfig     = WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1]
+    const diff           = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
+    const hpMult         = waveConfig.hpMult ?? 1
+    const effectiveMult  = 1.0 + (hpMult - 1.0) * diff.hpScaling
+    const boss           = createBossHero(bossType, effectiveMult, layoutData.pathTiles)
+    const now            = performance.now()
+
+    get().triggerScreenShake(6)
+    audio.play('wave_start')   // dramatic entrance sting
+
+    set({
+      bossSpawnedThisWave:       true,
+      activeBossName:            bossType.name,
+      bossEntranceFanfareEnd:    now + 1200,
+      bossEntranceFanfareColor:  bossType.auraColor,
+      heroes: [...heroes, boss],
+      battleLog: [
+        ...get().battleLog.slice(-26),
+        '══════════════════════════════',
+        `👑  ${bossType.name.toUpperCase()}`,
+        `💀  ${bossType.entranceDialogue}`,
+        '══════════════════════════════',
+      ],
+    })
+  },
+
   startWave() {
     const { waveIndex, layoutData, activeModifier, isEndlessMode, endlessWave, grid } = get()
 
@@ -479,6 +517,11 @@ export const useGameStore = create((set, get) => ({
       showEventOverlay:  globalEvent ? true : false,
       caveInTiles,
       holyGroundZone,
+      // Boss Heroes — reset for this wave
+      bossSpawnedThisWave:        false,
+      activeBossName:             null,
+      bossEntranceFanfareEnd:     0,
+      bossEntranceFanfareColor:   null,
       // Dark Lord's Demands — reset tracking for this wave
       darkLordDemandMet:          null,
       firstHeroKilledType:        null,
@@ -611,12 +654,14 @@ export const useGameStore = create((set, get) => ({
       // Build battle log entries
       const newLog = result.events.map(ev => {
         if (ev.type === 'hero_killed') {
+          if (ev.isBoss && ev.bossLine) return ev.bossLine
           return ev.hadGold
             ? `⚔️ ${ev.label} slain while fleeing! (+${ev.gold}g)`
             : `⚔️ ${ev.label} defeated (+${ev.gold}g)`
         }
         if (ev.type === 'treasure_reached') return `💰 ${ev.label} grabbed the gold — heading back!`
         if (ev.type === 'hero_escaped') {
+          if (ev.isBoss && ev.bossLine) return ev.bossLine
           if (ev.wrongDungeon) return `🗺️ ${ev.label} left immediately. Wrong dungeon.`
           return ev.hadGold
             ? `🏃 ${ev.label} escaped WITH the gold!`
@@ -752,11 +797,44 @@ export const useGameStore = create((set, get) => ({
         set({ grid: newGrid })
       }
 
+      // ── Boss entrance announcements in battle log ────────────────────────
+      result.events.forEach(ev => {
+        if (ev.type === 'boss_enraged') {
+          set({ battleLog: [...get().battleLog.slice(-28),
+            `🔥 ${ev.label} ENRAGES! Speed doubled — treasure damage tripled!`,
+          ]})
+          get().triggerScreenShake(8)
+          audio.play('boulder_crush')
+        }
+      })
+
+      // ── Boss spawn check: when all regular heroes resolve ─────────────────
+      const currentState  = get()
+      const bossConfig    = isEndlessWave ? null : waveConfig?.boss
+      const regularHeroes = result.heroes.filter(h => !h.isBoss)
+      const regularDone   = regularHeroes.length > 0 &&
+        regularHeroes.every(h => h.spawned && (h.state === 'dead' || h.state === 'escaped'))
+
+      if (regularDone && bossConfig && !currentState.bossSpawnedThisWave) {
+        get().spawnBoss(bossConfig.id)
+        const rafId = requestAnimationFrame(loop)
+        set({ simulationRef: rafId })
+        return
+      }
+
+      // ── Clear boss nameplate when boss resolves ───────────────────────────
+      if (currentState.activeBossName) {
+        const boss = result.heroes.find(h => h.isBoss)
+        if (boss && (boss.state === 'dead' || boss.state === 'escaped')) {
+          set({ activeBossName: null })
+        }
+      }
+
       // ── Wave-end conditions ──
       // 1. Treasure destroyed — early wave end (bad outcome)
       if (newTreasureHp <= 0) { get().endWave(); return }
 
-      // 2. All heroes resolved (dead or escaped)
+      // 2. All heroes resolved (dead or escaped) — includes boss if spawned
       const waveOver = result.heroes.every(h =>
         h.spawned && (h.state === 'dead' || h.state === 'escaped')
       )
@@ -774,8 +852,11 @@ export const useGameStore = create((set, get) => ({
     const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode, grid } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
     audio.play('wave_cleared')
-    // Clear global event state between waves
-    set({ activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null })
+    // Clear global event + boss state between waves
+    set({
+      activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
+      activeBossName: null, bossEntranceFanfareEnd: 0, bossEntranceFanfareColor: null,
+    })
 
     const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
 

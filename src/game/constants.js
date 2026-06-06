@@ -722,6 +722,112 @@ export const HERO_TYPES = {
   },
 }
 
+// ── Boss Hero Definitions ──────────────────────────────────────────────────
+// Bosses arrive AFTER all regular heroes in a wave have resolved.
+// hpMultiplier is applied on top of the wave's effectiveMult.
+// Stat fields mirror HERO_TYPES; boss-only fields: hpMultiplier, enrageable,
+// bossTreasureDamageMult, bossBaseType (for sprite look-up), dialogue lines.
+export const BOSS_TYPES = {
+  sir_aldric: {
+    id: 'sir_aldric',
+    name: 'Sir Aldric the Unyielding',
+    bossBaseType: 'knight',
+    color: '#d4a020',
+    auraColor: '#ffd040',
+    emoji: '⚔️',
+    // Stats
+    hp: 300,                // base (Knight), scaled by wave hpMult × hpMultiplier below
+    hpMultiplier: 3,
+    speed: 0.75,            // deliberate, measured stride
+    damageReduction: 0.30,
+    immuneToSlow: false,
+    immuneToPoison: false,
+    physicalOnly: false,
+    fireResist: 1,
+    enrageable: false,
+    selfHealRate: 0,
+    goldSpeedMult: 0.9,
+    canDisarm: false,
+    killGold: 150,
+    entranceDialogue: '"I\'ve cleared seventeen dungeons this quarter. Yours will be eighteen."',
+    deathLine: '⚔️ Sir Aldric falls. "...eighteen. Noted." He\'s already filing an appeal.',
+    escapeLine: '🏃 Sir Aldric exits with the gold. "Eighteen, as expected." He is already writing the report.',
+  },
+  mira_untouchable: {
+    id: 'mira_untouchable',
+    name: 'Mira the Untouchable',
+    bossBaseType: 'mage',
+    color: '#a030e0',
+    auraColor: '#d080ff',
+    emoji: '🔮',
+    hp: 160,                // base (Mage)
+    hpMultiplier: 2,
+    speed: 1.1,
+    damageReduction: 0,
+    immuneToSlow: false,
+    immuneToPoison: true,
+    physicalOnly: true,     // immune to fire, ice, poison, lava — only physical hurts her
+    fireResist: 0,
+    enrageable: false,
+    selfHealRate: 4,        // mage self-heal
+    goldSpeedMult: 0.65,
+    canDisarm: false,
+    killGold: 200,
+    entranceDialogue: '"Your fire vents are decorative. Your ice shards: art installations. Your dungeon: a disappointment."',
+    deathLine: '🔮 Mira falls. "...a small disappointment." Even her last words are a review.',
+    escapeLine: '🏃 Mira floats out with the gold. "One star. Maybe two." She\'s reviewing the dungeon on the way out.',
+  },
+  berserker_king: {
+    id: 'berserker_king',
+    name: 'The Berserker King',
+    bossBaseType: 'berserker',
+    color: '#cc2010',
+    auraColor: '#ff5020',
+    emoji: '🪓',
+    hp: 450,                // base (Berserker)
+    hpMultiplier: 5,
+    speed: 1.8,
+    damageReduction: 0,
+    immuneToSlow: true,
+    immuneToPoison: false,
+    physicalOnly: false,
+    fireResist: 1,
+    enrageable: true,       // enrages at 50% HP: speed×2, treasure damage×3
+    bossTreasureDamageMult: 3,
+    selfHealRate: 0,
+    goldSpeedMult: 1.1,
+    canDisarm: false,
+    killGold: 250,
+    entranceDialogue: '"(no words. Just the distant sound of things being destroyed.)"',
+    deathLine: '🪓 The Berserker King falls. The dungeon holds its breath.',
+    escapeLine: '🏃 The Berserker King tears through the exit. The door frame is gone.',
+  },
+  eternal_champion: {
+    id: 'eternal_champion',
+    name: 'The Eternal Champion',
+    bossBaseType: 'champion',
+    color: '#e0a010',
+    auraColor: '#ffd060',
+    emoji: '⚜️',
+    hp: 600,                // base (Champion)
+    hpMultiplier: 5,
+    speed: 0.85,
+    damageReduction: 0.55,  // 55% DR — harder than the base Champion
+    immuneToSlow: true,
+    immuneToPoison: true,
+    physicalOnly: false,
+    fireResist: 1,
+    enrageable: false,
+    selfHealRate: 5,        // 5 HP/s passive
+    goldSpeedMult: 0.9,
+    canDisarm: false,
+    killGold: 400,
+    entranceDialogue: '"I\'ve heard about this dungeon. The traps. The monsters. Gerald. I want you to know — I came here specifically for the challenge."',
+    deathLine: '⚜️ The Eternal Champion falls. Gerald sheds exactly one tear. He denies it.',
+    escapeLine: '🏃 The Eternal Champion walks out carrying the gold and Gerald\'s last shred of dignity.',
+  },
+}
+
 // ── Wave Compositions ──────────────────────────────────────────────────────
 // hpMult: multiplied against each hero's base HP (and healing, proportionally).
 // This counteracts the player's compounding defensive investment — by wave 14
@@ -782,6 +888,7 @@ export const WAVE_CONFIGS = [
   },
   { wave: 7,  hpMult: 3.0, gold: 300, label: 'They Are Not Giving Up',
     heroes: ['knight','knight','knight','mage','mage','thief','paladin'],
+    boss: { id: 'sir_aldric' },
     darkLordDemand: {
       id: 'no_trap_kills',
       text: '"Let the MONSTERS do the work. No on-path trap may land a killing blow." — The Dark Lord',
@@ -812,6 +919,7 @@ export const WAVE_CONFIGS = [
   },
   { wave: 10, hpMult: 4.8, gold: 400, label: 'The Brute Squad',
     heroes: ['berserker','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric'],
+    boss: { id: 'mira_untouchable' },
     darkLordDemand: {
       id: 'gold_efficiency',
       text: '"500 gold in defenses. Not one coin more. Elegance, not excess." — The Dark Lord',
@@ -830,6 +938,7 @@ export const WAVE_CONFIGS = [
   // Engineer debuts — tower-heavy dungeons suddenly have gaps carved through them.
   { wave: 12, hpMult: 6.5, gold: 480, label: 'They Sent a Saboteur',
     heroes: ['engineer','warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'],
+    boss: { id: 'berserker_king' },
     darkLordDemand: {
       id: 'speed_run_hard',
       text: '"60 seconds. They should not have this long to memorise my dungeon." — The Dark Lord',
@@ -853,6 +962,7 @@ export const WAVE_CONFIGS = [
   // Medic turns every kill into a question mark — kill it first or watch heroes revive.
   { wave: 14, hpMult: 9.0, gold: 550, label: "The Champion's Crusade",
     heroes: ['medic','champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'],
+    boss: { id: 'eternal_champion' },
     darkLordDemand: {
       id: 'kill_champion_first',
       text: '"The Champion arrives last — kill them FIRST. Show them my dungeon does not wait." — The Dark Lord',

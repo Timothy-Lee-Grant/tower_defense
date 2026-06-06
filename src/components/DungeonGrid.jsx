@@ -77,7 +77,9 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const layoutData       = useGameStore(s => s.layoutData)
   const showPathPreview  = useGameStore(s => s.showPathPreview)
   const showCoverageMap  = useGameStore(s => s.showCoverageMap)
-  const waveIndex        = useGameStore(s => s.waveIndex)
+  const waveIndex              = useGameStore(s => s.waveIndex)
+  const bossEntranceFanfareEnd   = useGameStore(s => s.bossEntranceFanfareEnd)
+  const bossEntranceFanfareColor = useGameStore(s => s.bossEntranceFanfareColor)
 
   // Global events visual state
   const caveInTiles    = useGameStore(s => s.caveInTiles)
@@ -86,6 +88,12 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const holyGroundRef    = useRef(holyGroundZone)
   caveInTilesRef.current = caveInTiles
   holyGroundRef.current  = holyGroundZone
+
+  // Boss fanfare refs
+  const bossFanfareEndRef   = useRef(bossEntranceFanfareEnd)
+  const bossFanfareColorRef = useRef(bossEntranceFanfareColor)
+  bossFanfareEndRef.current   = bossEntranceFanfareEnd
+  bossFanfareColorRef.current = bossEntranceFanfareColor
 
   const hoveredTile      = useRef(null)
   const animFrame        = useRef(null)
@@ -658,7 +666,33 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
       // ── Living heroes ────────────────────────────────────────────────────
       const { x, y, hp, maxHp, baseMaxHp } = hero
-      const drawHero = HERO_SPRITES[hero.type]
+      // Bosses fall back to their base hero sprite; regular heroes use their own type
+      const spriteKey = hero.isBoss ? (hero.bossBaseType ?? hero.type) : hero.type
+      const drawHero  = HERO_SPRITES[spriteKey]
+
+      // ── Boss: pulsing aura ring (drawn BEHIND the sprite) ────────────────
+      if (hero.isBoss) {
+        const auraColor = hero.bossAuraColor ?? hero.color
+        const auraAlpha = 0.25 + 0.18 * Math.sin(t * 0.004)
+        const auraR     = 26 + 4 * Math.sin(t * 0.003)
+        ctx.save()
+        // Outer glow ring
+        ctx.strokeStyle = auraColor
+        ctx.lineWidth   = 3.5
+        ctx.globalAlpha = auraAlpha
+        ctx.beginPath(); ctx.arc(x, y, auraR, 0, Math.PI * 2); ctx.stroke()
+        // Second thin ring slightly larger
+        ctx.lineWidth   = 1.5
+        ctx.globalAlpha = auraAlpha * 0.5
+        ctx.beginPath(); ctx.arc(x, y, auraR + 6, 0, Math.PI * 2); ctx.stroke()
+        // Enrage: fiery red inner fill when enraged
+        if (hero.enraged) {
+          ctx.fillStyle   = `rgba(255,50,10,${0.12 + 0.08 * Math.sin(t * 0.012)})`
+          ctx.globalAlpha = 1
+          ctx.beginPath(); ctx.arc(x, y, auraR, 0, Math.PI * 2); ctx.fill()
+        }
+        ctx.restore()
+      }
 
       ctx.save()
       if (hero.state === 'escaped') ctx.globalAlpha = 0.3
@@ -752,18 +786,37 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         ctx.setLineDash([])
       }
 
-      // HP bar
-      const barW  = 30, barH = 4
+      // HP bar — bosses get a wider, taller bar with gold border
+      const barW  = hero.isBoss ? 46 : 30
+      const barH  = hero.isBoss ? 6  : 4
       const barX  = x - barW / 2
-      const barY  = y - 28
+      const barY  = y - (hero.isBoss ? 34 : 28)
       const ratio = Math.max(0, hp / maxHp)
       ctx.fillStyle = '#0e0c12'
       ctx.fillRect(barX, barY, barW, barH)
       ctx.fillStyle = ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'
       ctx.fillRect(barX, barY, barW * ratio, barH)
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-      ctx.lineWidth   = 0.5
-      ctx.strokeRect(barX, barY, barW, barH)
+      if (hero.isBoss) {
+        ctx.strokeStyle = hero.bossAuraColor ?? 'rgba(232,196,74,0.6)'
+        ctx.lineWidth   = 1
+        ctx.strokeRect(barX, barY, barW, barH)
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+        ctx.lineWidth   = 0.5
+        ctx.strokeRect(barX, barY, barW, barH)
+      }
+
+      // Boss: crown emoji above HP bar + enrage flame indicator
+      if (hero.isBoss) {
+        const crownAlpha = 0.8 + 0.2 * Math.sin(t * 0.005)
+        ctx.save()
+        ctx.globalAlpha = crownAlpha
+        ctx.font         = '14px serif'
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(hero.enraged ? '🔥' : '👑', x, barY - 2)
+        ctx.restore()
+      }
 
       // Gold-carrying indicator
       if (hero.hasGold) {
@@ -802,6 +855,22 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
     const frameDelta = 16
     ps.update(frameDelta)
     ps.draw(ctx)
+
+    // ── 9. Boss entrance fanfare — full-canvas color flash ────────────────────
+    const fanfareEnd   = bossFanfareEndRef.current
+    const fanfareColor = bossFanfareColorRef.current
+    if (fanfareEnd && t < fanfareEnd && fanfareColor) {
+      const fanfareProgress = 1 - (fanfareEnd - t) / 1200
+      // Pulse: rises quickly then fades — peak alpha at ~30% of duration
+      const fanfareAlpha = fanfareProgress < 0.3
+        ? fanfareProgress / 0.3 * 0.45
+        : (1 - (fanfareProgress - 0.3) / 0.7) * 0.45
+      ctx.save()
+      ctx.globalAlpha = Math.max(0, fanfareAlpha)
+      ctx.fillStyle   = fanfareColor
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.restore()
+    }
 
     // ── End screen shake ──────────────────────────────────────────────────────
     if (shook) ctx.restore()

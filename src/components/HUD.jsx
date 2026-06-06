@@ -25,6 +25,9 @@ export default function HUD() {
   // ── Dark Lord's Demand ─────────────────────────────────────────────────────
   const demand = waveConfig?.darkLordDemand ?? null
 
+  // ── Boss nameplate ─────────────────────────────────────────────────────────
+  const activeBossName = useGameStore(s => s.activeBossName)
+
   // ── Save feedback state ───────────────────────────────────────────────────
   const [savedMsg, setSavedMsg] = useState('')
   const handleManualSave = useCallback(() => {
@@ -215,6 +218,15 @@ export default function HUD() {
       </div>
     </div>
 
+    {/* Boss nameplate — shown during WAVE phase when a boss is active */}
+    {activeBossName && phase === PHASE.WAVE && (
+      <div style={styles.bossNameplate}>
+        <span style={styles.bossNameplateIcon}>👑</span>
+        <span style={styles.bossNameplateName}>{activeBossName}</span>
+        <span style={styles.bossNameplateTag}>BOSS</span>
+      </div>
+    )}
+
     {/* Dark Lord's Demand banner — shown during PLAN and WAVE phases */}
     {demand && (phase === PHASE.PLAN || phase === PHASE.WAVE) && (
       <div style={styles.demandBanner}>
@@ -244,6 +256,34 @@ const styles = {
     background: '#0d0b0e',
     minHeight: 52,
     flexShrink: 0,
+  },
+  bossNameplate: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    padding: '0.3rem 1rem',
+    background: 'rgba(220,160,0,0.12)',
+    borderTop: '1px solid rgba(220,160,0,0.35)',
+    animation: 'bossNameplatePulse 2s ease-in-out infinite',
+  },
+  bossNameplateIcon: { fontSize: '0.9rem' },
+  bossNameplateName: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    color: '#ffd060',
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+  },
+  bossNameplateTag: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.5rem',
+    color: 'rgba(220,160,0,0.65)',
+    letterSpacing: '0.2em',
+    border: '1px solid rgba(220,160,0,0.35)',
+    borderRadius: 2,
+    padding: '1px 5px',
   },
   demandBanner: {
     display: 'flex',
@@ -424,7 +464,10 @@ const styles = {
   },
 }
 
-// Pulse keyframe
+// Keyframes
 const styleEl = document.createElement('style')
-styleEl.textContent = `@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`
+styleEl.textContent = `
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes bossNameplatePulse { 0%,100%{opacity:1;border-top-color:rgba(220,160,0,0.35)} 50%{opacity:0.75;border-top-color:rgba(220,160,0,0.7)} }
+`
 document.head.appendChild(styleEl)
