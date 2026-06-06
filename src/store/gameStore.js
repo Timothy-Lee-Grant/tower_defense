@@ -83,6 +83,16 @@ export const useGameStore = create((set, get) => ({
   caveInTiles:        [],     // [{col,row}] — off-path towers that will collapse mid-wave
   holyGroundZone:     null,   // {minCol,minRow,maxCol,maxRow} — no-placement zone this wave
 
+  // ── Dark Lord's Demands (feature 11) ──────────────────────────────────────
+  darkLordDemandMet:         null,   // null=pending, true/false after endWave()
+  firstHeroKilledType:       null,   // hero type of the first kill this wave
+  trapKillsThisWave:         0,      // heroes killed by on-path traps / DoT (killedBy:'path')
+  magesEscapedThisWave:      0,      // mage heroes who escaped (any state) this wave
+  heroesReachedTreasureCount: 0,     // heroes who grabbed the gold (treasure_reached events)
+  trollAttackedThisWave:     false,  // troll fired at least once this wave
+  waveElapsedMs:             0,      // total ms since wave start (for speed-run demand)
+  totalGridCost:             0,      // sum of tool costs on grid at wave end (gold_efficiency)
+
   // Plan-phase analysis overlays (reset to false when wave starts)
   showPathPreview: false,
   showCoverageMap: false,
@@ -469,6 +479,15 @@ export const useGameStore = create((set, get) => ({
       showEventOverlay:  globalEvent ? true : false,
       caveInTiles,
       holyGroundZone,
+      // Dark Lord's Demands — reset tracking for this wave
+      darkLordDemandMet:          null,
+      firstHeroKilledType:        null,
+      trapKillsThisWave:          0,
+      magesEscapedThisWave:       0,
+      heroesReachedTreasureCount: 0,
+      trollAttackedThisWave:      false,
+      waveElapsedMs:              0,
+      totalGridCost:              0,
     })
 
     // Auto-dismiss overlay after 3.5 seconds
@@ -667,6 +686,26 @@ export const useGameStore = create((set, get) => ({
         ...freshFlashes,
       ]
 
+      // ── Dark Lord's Demands — accumulate tracking fields ──────────────────
+      let newFirstKill    = state.firstHeroKilledType
+      let newTrapKills    = state.trapKillsThisWave
+      let newTrollAtk     = state.trollAttackedThisWave
+      let newReachedTreasure = state.heroesReachedTreasureCount
+      let newMagesEscaped = state.magesEscapedThisWave
+
+      result.events.forEach(ev => {
+        if (ev.type === 'hero_killed') {
+          if (newFirstKill === null) newFirstKill = ev.heroType
+          if (ev.killedBy === 'path') newTrapKills++
+        }
+        if (ev.type === 'tower_attack' && ev.towerType === 'troll') newTrollAtk = true
+        if (ev.type === 'treasure_reached') newReachedTreasure++
+        if (ev.type === 'hero_escaped' && !ev.wrongDungeon) {
+          const escapedHero = result.heroes.find(h => h.id === ev.hero)
+          if (escapedHero?.type === 'mage') newMagesEscaped++
+        }
+      })
+
       set({
         heroes:          enrichedHeroes,
         trapTimers:      result.trapTimers,
@@ -680,6 +719,13 @@ export const useGameStore = create((set, get) => ({
         bank:            state.bank + result.goldEarned,
         battleLog:       [...state.battleLog.slice(-30), ...newLog],
         attackFlashes:   activeFlashes,
+        // Demand tracking
+        firstHeroKilledType:       newFirstKill,
+        trapKillsThisWave:         newTrapKills,
+        trollAttackedThisWave:     newTrollAtk,
+        heroesReachedTreasureCount: newReachedTreasure,
+        magesEscapedThisWave:      newMagesEscaped,
+        waveElapsedMs:             waveElapsed,
       })
 
       // Handle boulder self-destruction (one-shot trap)
@@ -725,7 +771,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   endWave() {
-    const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode } = get()
+    const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode, grid } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
     audio.play('wave_cleared')
     // Clear global event state between waves
@@ -733,12 +779,49 @@ export const useGameStore = create((set, get) => ({
 
     const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
 
-    // Generate upgrade cards
+    // Generate upgrade cards (3 base)
     const locked   = DUNGEON_TOOLS.filter(t => !unlockedTools.includes(t.id))
     const shuffled = [...locked].sort(() => Math.random() - 0.5)
     const cards    = shuffled.slice(0, Math.min(3, shuffled.length)).map(tool => ({ type: 'unlock', tool }))
     const goldReward = Math.round(Math.min(80 + waveIndex * 12, 200) * diff.waveGoldMult)
     while (cards.length < 3) cards.push({ type: 'gold', amount: goldReward })
+
+    // ── Dark Lord's Demand evaluation ──────────────────────────────────────
+    const waveConfig   = WAVE_CONFIGS[waveIndex]
+    const demand       = waveConfig?.darkLordDemand
+    let demandMet      = null
+    let demandRewardCard = null
+
+    if (demand) {
+      // Compute totalGridCost for gold_efficiency demand
+      let gridCost = 0
+      for (let r = 0; r < GRID_ROWS; r++) {
+        for (let c = 0; c < GRID_COLS; c++) {
+          const tileId = grid[r]?.[c]
+          if (!tileId) continue
+          const def = DUNGEON_TOOLS.find(t => t.id === tileId)
+          if (def) gridCost += def.cost
+        }
+      }
+
+      const checkState = {
+        ...get(),
+        totalGridCost: gridCost,
+      }
+      demandMet = demand.check(checkState)
+
+      if (demandMet) {
+        // Build the reward card — a 4th upgrade option
+        const { reward } = demand
+        demandRewardCard = reward.type === 'unlock' && reward.toolId
+          ? { type: 'unlock', tool: DUNGEON_TOOLS.find(t => t.id === reward.toolId), isDemandReward: true }
+          : { type: 'gold', amount: reward.amount, isDemandReward: true }
+      }
+
+      set({ darkLordDemandMet: demandMet, totalGridCost: gridCost })
+    }
+
+    const finalCards = demandRewardCard ? [...cards, demandRewardCard] : cards
 
     const isLastDefinedWave = waveIndex + 1 >= WAVE_CONFIGS.length
     const baseGold = isEndlessMode || isLastDefinedWave
@@ -748,7 +831,7 @@ export const useGameStore = create((set, get) => ({
     set({
       phase:         PHASE.RESULTS,
       simulationRef: null,
-      upgradeCards:  cards,
+      upgradeCards:  finalCards,
       gold:          baseGold,
       attackFlashes: [],
     })

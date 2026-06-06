@@ -734,52 +734,142 @@ export const WAVE_CONFIGS = [
   // ── Tier 1: Tutorial (waves 1–3) ─────────────────────────────────────────
   // Baseline HP. Player is still learning tools and path coverage.
   { wave: 1,  hpMult: 1.0, gold: 120, label: 'The First Scouting Party',
-    heroes: ['knight','knight','knight'] },
+    heroes: ['knight','knight','knight'],
+    // No demand — wave 1 is tutorial
+  },
   { wave: 2,  hpMult: 1.0, gold: 140, label: 'They Brought a Lockpick',
-    heroes: ['knight','knight','thief'] },
+    heroes: ['knight','knight','thief'],
+    darkLordDemand: {
+      id: 'no_escaped_gold',
+      text: '"Let NO hero leave with my gold. Not even one coin." — The Dark Lord',
+      reward: { type: 'gold', amount: 50 },
+      check: (s) => s.heroesEscapedWithGold === 0,
+    },
+  },
   { wave: 3,  hpMult: 1.2, gold: 160, label: 'Mixed Tactics',
-    heroes: ['knight','knight','mage','thief'] },
+    heroes: ['knight','knight','mage','thief'],
+    darkLordDemand: {
+      id: 'perfect_defense',
+      text: '"The treasure must remain above 200 HP. Anything less is embarrassing." — The Dark Lord',
+      reward: { type: 'gold', amount: 60 },
+      check: (s) => s.treasureHp > 200,
+    },
+  },
 
   // ── Tier 2: Full Classic Roster (waves 4–7) ──────────────────────────────
   // HP starts scaling to match the dungeon growing from 250g → ~1500g invested.
   { wave: 4,  hpMult: 1.5, gold: 190, label: 'A Full Party',
-    heroes: ['knight','knight','mage','thief','paladin'] },
+    heroes: ['knight','knight','mage','thief','paladin'],
+    darkLordDemand: {
+      id: 'kill_paladin_first',
+      text: '"That Paladin heals the others. Kill it FIRST. I will be watching." — The Dark Lord',
+      reward: { type: 'gold', amount: 70 },
+      check: (s) => s.firstHeroKilledType === 'paladin',
+    },
+  },
   { wave: 5,  hpMult: 1.9, gold: 220, label: 'They Brought a Healer',
-    heroes: ['knight','knight','mage','mage','thief','paladin'] },
+    heroes: ['knight','knight','mage','mage','thief','paladin'],
+    darkLordDemand: {
+      id: 'speed_run',
+      text: '"Dispose of them in under 45 seconds. I have a 4 o\'clock." — The Dark Lord',
+      reward: { type: 'gold', amount: 80 },
+      check: (s) => s.waveElapsedMs <= 45000,
+    },
+  },
   { wave: 6,  hpMult: 2.4, gold: 260, label: 'The Siege Begins',
-    heroes: ['knight','knight','knight','mage','thief','paladin','thief'] },
+    heroes: ['knight','knight','knight','mage','thief','paladin','thief'],
+    // No demand — give player a breather
+  },
   { wave: 7,  hpMult: 3.0, gold: 300, label: 'They Are Not Giving Up',
-    heroes: ['knight','knight','knight','mage','mage','thief','paladin'] },
+    heroes: ['knight','knight','knight','mage','mage','thief','paladin'],
+    darkLordDemand: {
+      id: 'no_trap_kills',
+      text: '"Let the MONSTERS do the work. No on-path trap may land a killing blow." — The Dark Lord',
+      reward: { type: 'gold', amount: 90 },
+      check: (s) => s.trapKillsThisWave === 0,
+    },
+  },
 
   // ── Tier 3: New Threats (waves 8–10) ─────────────────────────────────────
   // Berserker / ranger debut. HP scaled to ~3–4.5× — dungeon ~3000–5000g.
   { wave: 8,  hpMult: 3.5, gold: 320, label: 'The Rage Begins',
-    heroes: ['berserker','knight','knight','mage','paladin','ranger','thief'] },
+    heroes: ['berserker','knight','knight','mage','paladin','ranger','thief'],
+    darkLordDemand: {
+      id: 'mage_must_not_escape',
+      text: '"Every Mage must die. I will not have them reporting our defenses to their guild." — The Dark Lord',
+      reward: { type: 'gold', amount: 100 },
+      check: (s) => s.magesEscapedThisWave === 0,
+    },
+  },
   { wave: 9,  hpMult: 4.0, gold: 360, label: 'Swift as Shadows',
-    heroes: ['ranger','ranger','berserker','berserker','knight','mage','thief','paladin'] },
+    heroes: ['ranger','ranger','berserker','berserker','knight','mage','thief','paladin'],
+    darkLordDemand: {
+      id: 'no_troll',
+      text: '"The Troll is MINE. Do not use it this wave — prove the dungeon needs no brute." — The Dark Lord',
+      reward: { type: 'gold', amount: 100 },
+      check: (s) => !s.trollAttackedThisWave,
+    },
+  },
   { wave: 10, hpMult: 4.8, gold: 400, label: 'The Brute Squad',
-    heroes: ['berserker','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric'] },
+    heroes: ['berserker','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric'],
+    darkLordDemand: {
+      id: 'gold_efficiency',
+      text: '"500 gold in defenses. Not one coin more. Elegance, not excess." — The Dark Lord',
+      reward: { type: 'gold', amount: 120 },
+      check: (s) => s.totalGridCost <= 500,
+    },
+  },
 
   // ── Tier 4: Elite Compositions (waves 11–12) ─────────────────────────────
   // Warlord and Regenerator debut. Players with lava/boulder-heavy dungeons
   // now face a hero that neutralises their on-path investments.
   { wave: 11, hpMult: 5.5, gold: 440, label: 'The Warlord Leads the Charge',
-    heroes: ['warlord','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric','regenerator'] },
+    heroes: ['warlord','berserker','berserker','ranger','ranger','knight','mage','paladin','cleric','regenerator'],
+    // No demand — Warlord wave is already punishing
+  },
   // Engineer debuts — tower-heavy dungeons suddenly have gaps carved through them.
   { wave: 12, hpMult: 6.5, gold: 480, label: 'They Sent a Saboteur',
-    heroes: ['engineer','warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'] },
+    heroes: ['engineer','warlord','warlord','berserker','berserker','ranger','ranger','mage','paladin','cleric','regenerator','thief'],
+    darkLordDemand: {
+      id: 'speed_run_hard',
+      text: '"60 seconds. They should not have this long to memorise my dungeon." — The Dark Lord',
+      reward: { type: 'gold', amount: 130 },
+      check: (s) => s.waveElapsedMs <= 60000,
+    },
+  },
 
   // ── Tier 5: Near-Impossible (waves 13–15) ────────────────────────────────
   // Archmage + arcane host. Full roster pressure — dungeon ~8500–11000g invested.
   // Phantom forces players who built magic-heavy to reckon with physical damage.
   { wave: 13, hpMult: 7.5, gold: 500, label: 'The Untouchable',
-    heroes: ['phantom','archmage','warlord','warlord','berserker','berserker','ranger','ranger','knight','paladin','cleric','regenerator','thief'] },
+    heroes: ['phantom','archmage','warlord','warlord','berserker','berserker','ranger','ranger','knight','paladin','cleric','regenerator','thief'],
+    darkLordDemand: {
+      id: 'let_them_through',
+      text: '"Allow at least 3 heroes to reach the treasure — then DESTROY them on the way out." — The Dark Lord',
+      reward: { type: 'gold', amount: 140 },
+      check: (s) => s.heroesReachedTreasureCount >= 3 && s.heroesEscapedWithGold === 0,
+    },
+  },
   // Medic turns every kill into a question mark — kill it first or watch heroes revive.
   { wave: 14, hpMult: 9.0, gold: 550, label: "The Champion's Crusade",
-    heroes: ['medic','champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'] },
+    heroes: ['medic','champion','archmage','archmage','warlord','warlord','berserker','berserker','ranger','ranger','cleric','paladin','regenerator'],
+    darkLordDemand: {
+      id: 'kill_champion_first',
+      text: '"The Champion arrives last — kill them FIRST. Show them my dungeon does not wait." — The Dark Lord',
+      reward: { type: 'gold', amount: 150 },
+      check: (s) => s.firstHeroKilledType === 'champion',
+    },
+  },
   // Crusader: blessed against creatures — traps and magic are the only answer.
   { wave: 15, hpMult: 11.0, gold: 600, label: 'The Holy Siege',
-    heroes: ['crusader','crusader','medic','champion','archmage','archmage','warlord','warlord','engineer','berserker','ranger','ranger','cleric','paladin','regenerator'] },
+    heroes: ['crusader','crusader','medic','champion','archmage','archmage','warlord','warlord','engineer','berserker','ranger','ranger','cleric','paladin','regenerator'],
+    darkLordDemand: {
+      id: 'perfect_hard',
+      text: '"The treasure must not drop below half health. This is my FINAL dungeon. Make it count." — The Dark Lord',
+      reward: { type: 'gold', amount: 200 },
+      check: (s) => s.treasureHp >= s.treasureMaxHp * 0.5,
+    },
+  },
 ]
 
 // ── Upgrade Tiers (Section 8) ─────────────────────────────────────────────

@@ -332,8 +332,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       const killGold = (hero.goldValue + (hero.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
       goldEarned += killGold
       events.push({
-        type: 'hero_killed', hero: hero.id, label: hero.label,
-        gold: killGold, hadGold: hero.hasGold,
+        type: 'hero_killed', hero: hero.id, heroType: hero.type, label: hero.label,
+        gold: killGold, hadGold: hero.hasGold, killedBy: 'path',
       })
       updatedHeroes.push({ ...hero, state: 'dead', hp: 0 })
       continue
@@ -494,8 +494,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
           const killGold = (updatedHeroes[idx].goldValue + (updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
           goldEarned += killGold
           events.push({
-            type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label,
-            gold: killGold, hadGold: updatedHeroes[idx].hasGold,
+            type: 'hero_killed', hero: updatedHeroes[idx].id, heroType: updatedHeroes[idx].type,
+            label: updatedHeroes[idx].label, gold: killGold, hadGold: updatedHeroes[idx].hasGold, killedBy: 'tower',
           })
           updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
         }
@@ -539,8 +539,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
           if (updatedHeroes[i].hp <= 0) {
             const killGold = (h.goldValue + (h.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
             goldEarned += killGold
-            events.push({ type: 'hero_killed', hero: h.id, label: h.label,
-              gold: killGold, hadGold: h.hasGold })
+            events.push({ type: 'hero_killed', hero: h.id, heroType: h.type, label: h.label,
+              gold: killGold, hadGold: h.hasGold, killedBy: 'tower' })
             updatedHeroes[i] = { ...updatedHeroes[i], state: 'dead', hp: 0 }
           }
         }

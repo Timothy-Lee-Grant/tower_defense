@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { selectResultsComment } from '../game/gerald.js'
+import { WAVE_CONFIGS } from '../game/constants.js'
 
 export default function ResultsScreen() {
   const waveIndex             = useGameStore(s => s.waveIndex)
@@ -12,6 +13,10 @@ export default function ResultsScreen() {
   const treasureMaxHp         = useGameStore(s => s.treasureMaxHp)   // difficulty-adjusted ceiling
   const upgradeCards          = useGameStore(s => s.upgradeCards)
   const pickUpgradeCard       = useGameStore(s => s.pickUpgradeCard)
+  const darkLordDemandMet     = useGameStore(s => s.darkLordDemandMet)
+
+  // Dark Lord's demand for the wave that just completed
+  const demand = WAVE_CONFIGS[waveIndex]?.darkLordDemand ?? null
 
   const [picked, setPicked] = useState(false)
 
@@ -91,14 +96,55 @@ export default function ResultsScreen() {
           <p style={s.memoText}>{geraldMemo}</p>
         </div>
 
+        {/* Dark Lord's Demand result */}
+        {demand && darkLordDemandMet !== null && (
+          <div style={{
+            ...s.demandResult,
+            background: darkLordDemandMet ? 'rgba(20,80,20,0.25)' : 'rgba(80,20,20,0.2)',
+            borderColor: darkLordDemandMet ? 'rgba(80,180,80,0.25)' : 'rgba(180,40,40,0.25)',
+          }}>
+            <div style={s.demandResultHeader}>
+              <span style={s.demandIcon}>🔱</span>
+              <span style={s.demandLabel}>
+                THE DARK LORD'S DEMAND
+              </span>
+              <span style={{
+                ...s.demandStatus,
+                color: darkLordDemandMet ? '#60c060' : '#c06060',
+              }}>
+                {darkLordDemandMet ? '✅ FULFILLED' : '❌ FAILED'}
+              </span>
+            </div>
+            <p style={s.demandText}>{demand.text}</p>
+            {darkLordDemandMet && (
+              <p style={s.demandReward}>
+                Reward unlocked: +{demand.reward.amount}g bonus upgrade option below
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Upgrade cards */}
         {!picked && upgradeCards.length > 0 && (
           <div style={s.upgradeSection}>
             <div style={s.upgradeHeader}>⚗ Choose Your Upgrade</div>
-            <p style={s.upgradeSubtitle}>One new capability for the next wave</p>
-            <div style={s.cards}>
+            <p style={s.upgradeSubtitle}>
+              {upgradeCards.some(c => c.isDemandReward)
+                ? 'One new capability — plus a bonus option from the Dark Lord'
+                : 'One new capability for the next wave'}
+            </p>
+            <div style={{
+              ...s.cards,
+              gridTemplateColumns: upgradeCards.length === 4 ? 'repeat(4,1fr)' : 'repeat(3,1fr)',
+            }}>
               {upgradeCards.map((card, i) => (
-                <button key={i} style={s.card} onClick={() => handlePick(card)}>
+                <button key={i} style={{
+                  ...s.card,
+                  ...(card.isDemandReward ? s.cardDemandReward : {}),
+                }} onClick={() => handlePick(card)}>
+                  {card.isDemandReward && (
+                    <div style={s.cardDemandBadge}>🔱 Dark Lord's Reward</div>
+                  )}
                   <div style={s.cardEmoji}>{card.type === 'unlock' ? card.tool.emoji : '💰'}</div>
                   <div style={s.cardName}>
                     {card.type === 'unlock' ? card.tool.label : `+${card.amount} Gold`}
@@ -200,4 +246,45 @@ const s = {
   cardPickBtn: { marginTop: '0.4rem', fontFamily: "'Cinzel', serif", fontSize: '0.62rem', color: 'var(--gold-dim)', letterSpacing: '0.05em' },
   nextWaveMsg: { textAlign: 'center', padding: '2rem' },
   nextWaveText: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '1.1rem', color: 'var(--text-secondary)' },
+
+  // Dark Lord's Demand
+  demandResult: {
+    border: '1px solid',
+    borderRadius: 8,
+    padding: '0.85rem 1.1rem',
+    display: 'flex', flexDirection: 'column', gap: '0.4rem',
+  },
+  demandResultHeader: {
+    display: 'flex', alignItems: 'center', gap: '0.5rem',
+  },
+  demandIcon: { fontSize: '0.9rem', flexShrink: 0 },
+  demandLabel: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.58rem', letterSpacing: '0.12em',
+    color: 'var(--text-muted)', textTransform: 'uppercase', flex: 1,
+  },
+  demandStatus: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.62rem', letterSpacing: '0.08em', fontWeight: 700,
+  },
+  demandText: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.88rem', color: 'var(--bone)', lineHeight: 1.5, margin: 0,
+  },
+  demandReward: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.58rem', color: '#a0d0a0', letterSpacing: '0.05em', margin: 0,
+  },
+
+  // 4th card (demand reward)
+  cardDemandReward: {
+    border: '1px solid rgba(100,180,100,0.35)',
+    background: 'rgba(20,60,20,0.3)',
+  },
+  cardDemandBadge: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.5rem', letterSpacing: '0.08em',
+    color: '#80c080', textTransform: 'uppercase',
+    marginBottom: '0.1rem',
+  },
 }

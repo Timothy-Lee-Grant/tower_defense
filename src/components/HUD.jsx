@@ -22,6 +22,9 @@ export default function HUD() {
   const diff          = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
   const hpRatio       = treasureHp / treasureMaxHp
 
+  // ── Dark Lord's Demand ─────────────────────────────────────────────────────
+  const demand = waveConfig?.darkLordDemand ?? null
+
   // ── Save feedback state ───────────────────────────────────────────────────
   const [savedMsg, setSavedMsg] = useState('')
   const handleManualSave = useCallback(() => {
@@ -49,7 +52,7 @@ export default function HUD() {
   }, [])
 
   return (
-    <div style={styles.hud}>
+    <div style={styles.hudWrapper}>
       {/* Left: wave info */}
       <div style={styles.section}>
         <span style={styles.label}>WAVE</span>
@@ -211,18 +214,63 @@ export default function HUD() {
         </button>
       </div>
     </div>
+
+    {/* Dark Lord's Demand banner — shown during PLAN and WAVE phases */}
+    {demand && (phase === PHASE.PLAN || phase === PHASE.WAVE) && (
+      <div style={styles.demandBanner}>
+        <span style={styles.demandIcon}>🔱</span>
+        <span style={styles.demandText}>{demand.text}</span>
+        <span style={styles.demandReward}>
+          Reward: +{demand.reward.amount}g
+        </span>
+      </div>
+    )}
+    </div>
   )
 }
 
 const styles = {
+  hudWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    borderBottom: '1px solid rgba(232,196,74,0.15)',
+  },
   hud: {
     display: 'flex',
     alignItems: 'center',
     gap: '1.5rem',
     padding: '0.5rem 1rem',
     background: '#0d0b0e',
-    borderBottom: '1px solid rgba(232,196,74,0.15)',
     minHeight: 52,
+    flexShrink: 0,
+  },
+  demandBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    padding: '0.3rem 1rem',
+    background: 'rgba(100,20,20,0.35)',
+    borderTop: '1px solid rgba(180,40,40,0.25)',
+  },
+  demandIcon: {
+    fontSize: '0.85rem',
+    flexShrink: 0,
+  },
+  demandText: {
+    fontFamily: "'Crimson Text', serif",
+    fontStyle: 'italic',
+    fontSize: '0.8rem',
+    color: '#d4a0a0',
+    flex: 1,
+    lineHeight: 1.3,
+  },
+  demandReward: {
+    fontFamily: "'Cinzel', serif",
+    fontSize: '0.6rem',
+    color: 'var(--gold-dim)',
+    letterSpacing: '0.08em',
+    whiteSpace: 'nowrap',
     flexShrink: 0,
   },
   section: {
