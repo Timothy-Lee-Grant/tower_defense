@@ -417,6 +417,12 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
         type: 'hero_killed', hero: hero.id, heroType: hero.type, label: hero.label,
         gold: killGold, hadGold: hero.hasGold, killedBy: 'path',
         isBoss: hero.isBoss ?? false, bossLine: hero.bossDeathLine,
+        // ── Feature 14.1: kill-chain context for combo detection ──────────
+        slowed:       hero.slowed,
+        poisoned:     hero.poisoned,
+        curseStacks:  hero.curseStacks,
+        maxHpDrained: (hero.baseMaxHp ?? 0) > 0 && hero.maxHp < hero.baseMaxHp,
+        killTowerType: 'path',
       })
       updatedHeroes.push({ ...hero, state: 'dead', hp: 0 })
       continue
@@ -580,6 +586,12 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
             type: 'hero_killed', hero: updatedHeroes[idx].id, heroType: updatedHeroes[idx].type,
             label: updatedHeroes[idx].label, gold: killGold, hadGold: updatedHeroes[idx].hasGold, killedBy: 'tower',
             isBoss: updatedHeroes[idx].isBoss ?? false, bossLine: updatedHeroes[idx].bossDeathLine,
+            // ── Feature 14.1: kill-chain context for combo detection ──────
+            slowed:        updatedHeroes[idx].slowed,
+            poisoned:      updatedHeroes[idx].poisoned,
+            curseStacks:   updatedHeroes[idx].curseStacks,
+            maxHpDrained:  (updatedHeroes[idx].baseMaxHp ?? 0) > 0 && updatedHeroes[idx].maxHp < updatedHeroes[idx].baseMaxHp,
+            killTowerType: tileId,
           })
           updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
         }
@@ -623,9 +635,15 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
           if (updatedHeroes[i].hp <= 0) {
             const killGold = (h.goldValue + (h.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
             goldEarned += killGold
-            events.push({ type: 'hero_killed', hero: h.id, heroType: h.type, label: h.label,
+            events.push({
+              type: 'hero_killed', hero: h.id, heroType: h.type, label: h.label,
               gold: killGold, hadGold: h.hasGold, killedBy: 'tower',
-              isBoss: h.isBoss ?? false, bossLine: h.bossDeathLine })
+              isBoss: h.isBoss ?? false, bossLine: h.bossDeathLine,
+              // ── Feature 14.1: kill-chain context ─────────────────────────
+              slowed: h.slowed, poisoned: h.poisoned, curseStacks: h.curseStacks,
+              maxHpDrained: (h.baseMaxHp ?? 0) > 0 && h.maxHp < h.baseMaxHp,
+              killTowerType: tileId,
+            })
             updatedHeroes[i] = { ...updatedHeroes[i], state: 'dead', hp: 0 }
           }
         }

@@ -14,6 +14,7 @@ export default function ResultsScreen() {
   const upgradeCards          = useGameStore(s => s.upgradeCards)
   const pickUpgradeCard       = useGameStore(s => s.pickUpgradeCard)
   const darkLordDemandMet     = useGameStore(s => s.darkLordDemandMet)
+  const bestComboThisWave     = useGameStore(s => s.bestComboThisWave)
 
   // Dark Lord's demand for the wave that just completed
   const demand = WAVE_CONFIGS[waveIndex]?.darkLordDemand ?? null
@@ -75,6 +76,15 @@ export default function ResultsScreen() {
             color={hpRatio > 0.6 ? 'var(--gold-bright)' : hpRatio > 0.3 ? '#c4430a' : '#8b1a1a'}
           />
         </div>
+
+        {/* Feature 14.3: Best combo of the wave */}
+        {bestComboThisWave && (
+          <div style={s.bestCombo}>
+            <span style={s.bestComboHeader}>⚡ Best Kill of the Wave</span>
+            <p style={s.bestComboLabel}>{bestComboThisWave.label}</p>
+            <p style={s.bestComboHero}>{bestComboThisWave.heroLabel}</p>
+          </div>
+        )}
 
         {/* Gold stolen bar */}
         {goldStolenThisWave > 0 && (
@@ -210,6 +220,27 @@ const s = {
     fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
     letterSpacing: '0.1em', color: 'var(--text-muted)', marginTop: '0.3rem', textTransform: 'uppercase',
   },
+  // Feature 14.3: Best combo card
+  bestCombo: {
+    background: 'rgba(40,220,160,0.05)',
+    border: '1px solid rgba(40,220,160,0.2)',
+    borderRadius: 8, padding: '0.65rem 1.1rem',
+    display: 'flex', flexDirection: 'column', gap: '0.15rem',
+  },
+  bestComboHeader: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.56rem',
+    letterSpacing: '0.1em', color: 'rgba(60,255,180,0.7)',
+    textTransform: 'uppercase',
+  },
+  bestComboLabel: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.95rem', color: 'var(--bone)', margin: 0, lineHeight: 1.4,
+  },
+  bestComboHero: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    color: 'rgba(60,255,180,0.55)', letterSpacing: '0.06em', margin: 0,
+  },
+
   stolenRow: {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
     background: 'rgba(139,26,26,0.08)', border: '1px solid rgba(139,26,26,0.2)',

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, WAVE_CONFIGS } from '../game/constants.js'
+import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, WAVE_CONFIGS, SYNERGY_PAIRS } from '../game/constants.js'
 import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
 import { ParticleSystem, PARTICLE_EFFECTS } from '../rendering/particles.js'
 import { computeCoverageMap, HERO_PATH_COLORS } from '../game/analysis.js'
@@ -610,6 +610,78 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.setLineDash([])
     }
 
+    // ── 3b. Feature 14.2: Synergy glows + tooltip (plan phase only) ─────────
+    if (phase === PHASE.PLAN && selectedTool) {
+      // Collect all tile types that synergize with the selected tool (both directions)
+      const synDesc = {}   // tileId → description string
+      if (SYNERGY_PAIRS[selectedTool]) {
+        Object.entries(SYNERGY_PAIRS[selectedTool]).forEach(([tid, desc]) => { synDesc[tid] = desc })
+      }
+      // Reverse: other tile types that list selectedTool as their synergy partner
+      Object.entries(SYNERGY_PAIRS).forEach(([otherTool, pairs]) => {
+        if (pairs[selectedTool] && !synDesc[otherTool]) synDesc[otherTool] = pairs[selectedTool]
+      })
+
+      if (Object.keys(synDesc).length > 0) {
+        const hov = hoveredTile.current
+        let tooltipText = null
+        let tooltipX = 0
+        let tooltipY = 0
+
+        for (let row = 0; row < GRID_ROWS; row++) {
+          for (let col = 0; col < GRID_COLS; col++) {
+            const tileId = currentGrid[row][col]
+            const desc   = synDesc[tileId]
+            if (!desc) continue
+
+            const x      = col * TILE_SIZE
+            const y      = row * TILE_SIZE
+            const isHov  = hov && hov.col === col && hov.row === row
+            const pulse  = 0.14 + 0.08 * Math.sin(t * 0.004 + col * 0.7 + row * 0.5)
+            const alpha  = isHov ? 0.32 : pulse
+
+            // Teal synergy glow
+            ctx.fillStyle = `rgba(40,220,160,${alpha})`
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
+            ctx.strokeStyle = `rgba(60,255,180,${alpha * 2.2})`
+            ctx.lineWidth = isHov ? 2 : 1.5
+            ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+
+            if (isHov) {
+              tooltipText = `✦ ${desc}`
+              tooltipX    = x + TILE_SIZE / 2
+              tooltipY    = y
+            }
+          }
+        }
+
+        // Draw tooltip above the hovered synergy tile
+        if (tooltipText) {
+          ctx.font = 'bold 11px Arial'
+          const textW  = ctx.measureText(tooltipText).width
+          const boxW   = textW + 18
+          const boxH   = 22
+          const boxX   = Math.max(2, Math.min(tooltipX - boxW / 2, canvas.width - boxW - 2))
+          const boxY   = Math.max(2, tooltipY - boxH - 6)
+
+          // Background
+          ctx.fillStyle = 'rgba(6,4,12,0.93)'
+          _roundRect(ctx, boxX, boxY, boxW, boxH, 4)
+          ctx.fill()
+          // Border
+          ctx.strokeStyle = 'rgba(60,255,180,0.65)'
+          ctx.lineWidth = 1
+          _roundRect(ctx, boxX, boxY, boxW, boxH, 4)
+          ctx.stroke()
+          // Text
+          ctx.fillStyle    = '#4dffc0'
+          ctx.textAlign    = 'left'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(tooltipText, boxX + 9, boxY + boxH / 2)
+        }
+      }
+    }
+
     // ── 4. Hover highlight ───────────────────────────────────────────────────
     if (hoveredTile.current && (phase === PHASE.PLAN || phase === PHASE.WAVE)) {
       const { col, row } = hoveredTile.current
@@ -925,6 +997,21 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       onContextMenu={handleContextMenu}
     />
   )
+}
+
+// ── Internal helper — rounded rectangle path (no fill/stroke) ────────────────
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.arcTo(x + w, y, x + w, y + r, r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+  ctx.lineTo(x + r, y + h)
+  ctx.arcTo(x, y + h, x, y + h - r, r)
+  ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r)
+  ctx.closePath()
 }
 
 // ── Internal helper — draw a single tile's background ────────────────────────

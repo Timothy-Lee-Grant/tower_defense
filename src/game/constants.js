@@ -1239,3 +1239,64 @@ export const GOLD_CARRYING_BONUS   = 25      // extra gold if you kill a hero wh
 export const TREASURE_MAX_HP       = 300
 export const TREASURE_HERO_DAMAGE  = 80
 export const HERO_SPAWN_STAGGER_MS = 1500    // ms between hero spawns (was 1200)
+
+// ── Feature 14.2: Tower synergy pairs (plan-phase highlight hints) ──────────
+// SYNERGY_PAIRS[tileA][tileB] = tooltip string shown when tileA is selected
+// and the cursor hovers near a tileB (or vice-versa — both directions are checked).
+export const SYNERGY_PAIRS = {
+  [TILE.ICE]: {
+    [TILE.FIRE]:     'Frozen Hellfire — slowed heroes can\'t escape the inferno (+15g combo).',
+    [TILE.DART]:     'Slowed targets are pinned in dart range for multiple hits (+10g combo).',
+    [TILE.SKELETON]: 'Slow lets the skeleton strike 2–3× before heroes escape melee.',
+    [TILE.GARGOYLE]: 'Slowed heroes can\'t dodge a Gargoyle dive — full damage guaranteed.',
+    [TILE.SPIDER]:   'Spider adds poison on top of slow — compound pressure on every target.',
+    [TILE.BAT]:      'Slowed + drained — heroes barely move as HP collapses.',
+  },
+  [TILE.IDOL]: {
+    [TILE.GARGOYLE]: 'Curse stacks boost Gargoyle damage by up to 45%.',
+    [TILE.SHADOW]:   'Shadow deals double damage on cursed gold carriers.',
+    [TILE.BAT]:      'Bat drain scales with curse — every hit hits harder (+combo).',
+    [TILE.FIRE]:     'Cursed heroes take 15–45% more fire damage.',
+    [TILE.DART]:     'Curse turns dart chip-hits into something lethal.',
+    [TILE.SPIDER]:   'Spider applies slow + poison, priming each Idol curse.',
+    [TILE.POISON]:   'Poisoned + cursed: every DoT tick is amplified up to 45%.',
+  },
+  [TILE.SHADOW]: {
+    [TILE.IDOL]:     'Curse first, ambush second — cursed gold carriers rarely survive (+15g).',
+    [TILE.BAT]:      'Bat and Shadow both hunt gold carriers; stack for focused fire.',
+    [TILE.ICE]:      'Slowed carriers can\'t flee the Shadow\'s ambush range.',
+  },
+  [TILE.BAT]: {
+    [TILE.IDOL]:     'Cursed targets suffer amplified drain per hit.',
+    [TILE.POISON]:   'Poison DoT + bat drain = sustained HP erosion.',
+    [TILE.ICE]:      'Slowed and drained — the slowest, ugliest death possible.',
+    [TILE.SHADOW]:   'Both towers prioritise gold carriers — aim the same lane.',
+  },
+  [TILE.POISON]: {
+    [TILE.IDOL]:     'Poisoned + cursed: DoT ticks up to 45% harder.',
+    [TILE.BAT]:      'Combine poison tick with bat drain for maximum attrition.',
+    [TILE.ICE]:      'Slowed and poisoned — they die before reaching the far side.',
+    [TILE.SPIDER]:   'Spider already applies poison — this doubles the DoT source.',
+  },
+  [TILE.SPIDER]: {
+    [TILE.FIRE]:     'Spider\'s slow + poison sets up the Frozen Hellfire kill combo.',
+    [TILE.IDOL]:     'Spider applies both status effects, amplifying every curse stack.',
+    [TILE.GARGOYLE]: 'Slowed + poisoned heroes are ideal Gargoyle burst targets.',
+    [TILE.ICE]:      'Double slow stacks with ice — heroes nearly stop entirely.',
+  },
+  [TILE.TROLL]: {
+    [TILE.IDOL]:     'Cursed heroes take up to 45% more troll AoE damage.',
+    [TILE.ICE]:      'Slow a cluster of heroes, then troll hits them all at once.',
+    [TILE.STASIS]:   'Stasis freezes one hero so troll\'s AoE hits the whole group.',
+  },
+  [TILE.GARGOYLE]: {
+    [TILE.IDOL]:     'Gargoyle damage scales directly with curse stacks — up to 45%.',
+    [TILE.ICE]:      'Slowed heroes can\'t evade Gargoyle dives.',
+    [TILE.SPIDER]:   'Spider slow + poison primes the Gargoyle burst.',
+  },
+  [TILE.STASIS]: {
+    [TILE.TROLL]:    'Freeze one hero so the Troll\'s AoE catches the whole group.',
+    [TILE.DART]:     'Stasis lets dart reload a full cycle — free guaranteed shots.',
+    [TILE.SKELETON]: 'Frozen hero takes full skeleton DPS for the entire 2 s duration.',
+  },
+}

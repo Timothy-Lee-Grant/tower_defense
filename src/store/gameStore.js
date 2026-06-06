@@ -16,6 +16,64 @@ import {
   recordCampaignNode, readCampaignProgress, recordEndlessHigh, readEndlessHigh,
 } from '../game/persistence.js'
 
+// ── Feature 14.1: Combo definitions ──────────────────────────────────────────
+// Each entry is checked against each hero_killed event in the RAF loop.
+// `complexity` determines which combo "wins" when multiple apply to the same kill.
+const COMBO_DEFS = [
+  // ── Multi-status ultimate combos (highest complexity) ─────────────────────
+  {
+    id: 'triple_threat',
+    check: (ev) => ev.poisoned && ev.curseStacks >= 2 && ev.slowed && ev.killedBy === 'tower',
+    label: '☠️👁️❄ Triple Threat — poisoned, cursed, slowed. A truly bleak ending.',
+    bonus: 30,
+    complexity: 5,
+  },
+  // ── Two-status combos ─────────────────────────────────────────────────────
+  {
+    id: 'corrupted',
+    check: (ev) => ev.poisoned && ev.curseStacks >= 1 && ev.killedBy === 'tower',
+    label: '☠️👁️ Corrupted! The most miserable death possible.',
+    bonus: 20,
+    complexity: 3,
+  },
+  {
+    id: 'drained_helpless',
+    check: (ev) => ev.maxHpDrained && ev.slowed && ev.killedBy === 'tower',
+    label: '🦇❄ Drained and Helpless — max HP sapped, body slowed, spirit broken.',
+    bonus: 20,
+    complexity: 3,
+  },
+  // ── Named single-synergy combos ───────────────────────────────────────────
+  {
+    id: 'frozen_hellfire',
+    check: (ev) => ev.slowed && ev.killTowerType === TILE.FIRE,
+    label: '❄🔥 Frozen Hellfire! Slowed then incinerated.',
+    bonus: 15,
+    complexity: 2,
+  },
+  {
+    id: 'ambush',
+    check: (ev) => ev.killTowerType === TILE.SHADOW && ev.hadGold,
+    label: '🌑💰 Ambushed on the return trip! Gold secured.',
+    bonus: 15,
+    complexity: 2,
+  },
+  {
+    id: 'pinned',
+    check: (ev) => ev.slowed && ev.killTowerType === TILE.DART,
+    label: '❄🏹 Pinned! Slowed and skewered mid-corridor.',
+    bonus: 10,
+    complexity: 2,
+  },
+  {
+    id: 'cursed_gargoyle',
+    check: (ev) => ev.curseStacks >= 2 && ev.killTowerType === TILE.GARGOYLE,
+    label: '👁️🦅 Curse-Amplified Strike! Gargoyle hit for maximum bonus damage.',
+    bonus: 15,
+    complexity: 2,
+  },
+]
+
 // ── Layout-aware grid factory ──────────────────────────────────────────────
 function makeGridFromLayout(layoutData) {
   const grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(TILE.EMPTY))
@@ -99,6 +157,9 @@ export const useGameStore = create((set, get) => ({
   trollAttackedThisWave:     false,  // troll fired at least once this wave
   waveElapsedMs:             0,      // total ms since wave start (for speed-run demand)
   totalGridCost:             0,      // sum of tool costs on grid at wave end (gold_efficiency)
+
+  // ── Feature 14: Combo + Synergy tracking ─────────────────────────────────
+  bestComboThisWave: null,   // { label: string, heroLabel: string, complexity: number }
 
   // ── Feature 13: Hero AI Adaptations ──────────────────────────────────────
   // Persists across waves for the lifetime of a run.
@@ -602,6 +663,8 @@ export const useGameStore = create((set, get) => ({
       trollAttackedThisWave:      false,
       waveElapsedMs:              0,
       totalGridCost:              0,
+      // Feature 14: reset combo tracking
+      bestComboThisWave:          null,
     })
 
     // Auto-dismiss overlay after 3.5 seconds
@@ -819,6 +882,46 @@ export const useGameStore = create((set, get) => ({
         ...freshFlashes,
       ]
 
+      // ── Feature 14.1: Combo detection ────────────────────────────────────
+      // Count per-tick AoE kills for multi-kill combo checks
+      const trollKillsThisTick  = result.events.filter(e => e.type === 'hero_killed' && e.killTowerType === TILE.TROLL).length
+      const boulderTriggers     = result.events.filter(e => e.type === 'trap_triggered' && e.trap === 'boulder').length
+
+      const comboLogEntries  = []
+      let   comboBonusGold   = 0
+      let   newBestCombo     = state.bestComboThisWave
+
+      result.events.forEach(ev => {
+        if (ev.type !== 'hero_killed') return
+
+        // Find highest-complexity combo that applies to this kill
+        const match = COMBO_DEFS
+          .filter(c => c.check(ev))
+          .sort((a, b) => b.complexity - a.complexity)[0]
+
+        if (match) {
+          comboLogEntries.push(`⚡ ${match.label} (+${match.bonus}g)`)
+          comboBonusGold += match.bonus
+          if (!newBestCombo || match.complexity > newBestCombo.complexity) {
+            newBestCombo = { label: match.label, heroLabel: ev.label, complexity: match.complexity }
+          }
+        }
+      })
+
+      // Multi-kill combos (not tied to a single hero_killed event)
+      if (trollKillsThisTick >= 3) {
+        comboLogEntries.push(`🧌 Troll Rampage! ${trollKillsThisTick} heroes flattened simultaneously. (+25g)`)
+        comboBonusGold += 25
+        const rampageCombo = { label: '🧌 Troll Rampage!', heroLabel: `${trollKillsThisTick}×`, complexity: 4 }
+        if (!newBestCombo || rampageCombo.complexity > newBestCombo.complexity) newBestCombo = rampageCombo
+      }
+      if (boulderTriggers >= 2) {
+        comboLogEntries.push(`🪨 Double Crush! Boulder caught ${boulderTriggers} heroes. (+10g)`)
+        comboBonusGold += 10
+        const crushCombo = { label: '🪨 Double Crush!', heroLabel: `${boulderTriggers}×`, complexity: 2 }
+        if (!newBestCombo || crushCombo.complexity > newBestCombo.complexity) newBestCombo = crushCombo
+      }
+
       // ── Dark Lord's Demands — accumulate tracking fields ──────────────────
       let newFirstKill    = state.firstHeroKilledType
       let newTrapKills    = state.trapKillsThisWave
@@ -849,8 +952,9 @@ export const useGameStore = create((set, get) => ({
         heroesEscapedEmpty:    state.heroesEscapedEmpty    + (newEscNone - prevEscNone),
         goldEarnedThisWave: state.goldEarnedThisWave + result.goldEarned,
         goldStolenThisWave: state.goldStolenThisWave + result.treasureDamage,
-        bank:            state.bank + result.goldEarned,
-        battleLog:       [...state.battleLog.slice(-30), ...newLog],
+        bank:            state.bank + result.goldEarned + comboBonusGold,
+        battleLog:       [...state.battleLog.slice(-30), ...newLog, ...comboLogEntries],
+        bestComboThisWave: newBestCombo,
         attackFlashes:   activeFlashes,
         // Demand tracking
         firstHeroKilledType:       newFirstKill,
