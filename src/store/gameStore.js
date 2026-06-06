@@ -5,6 +5,7 @@ import {
   SELL_REFUND_RATE, BANK_COST_MULT, WAVE_CONFIGS,
   HERO_TYPES, DIFFICULTIES, UPGRADE_TIERS, BOSS_TYPES,
   DUNGEON_LAYOUTS, CAMPAIGN_NODES, CAMPAIGN_MODIFIERS, buildLayoutData,
+  HERO_SPAWN_STAGGER_MS,
 } from '../game/constants.js'
 import { createHero, createBossHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
@@ -99,6 +100,13 @@ export const useGameStore = create((set, get) => ({
   waveElapsedMs:             0,      // total ms since wave start (for speed-run demand)
   totalGridCost:             0,      // sum of tool costs on grid at wave end (gold_efficiency)
 
+  // ── Feature 13: Hero AI Adaptations ──────────────────────────────────────
+  // Persists across waves for the lifetime of a run.
+  heroMemory: {
+    trapTriggersByTile:  {},  // "col,row" → cumulative trigger count (all waves)
+    warlordDestroyCount: 0,   // warlord trap-disarms across all waves
+  },
+
   // Plan-phase analysis overlays (reset to false when wave starts)
   showPathPreview: false,
   showCoverageMap: false,
@@ -153,6 +161,7 @@ export const useGameStore = create((set, get) => ({
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
       pendingLayout: null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
+      heroMemory: { trapTriggersByTile: {}, warlordDestroyCount: 0 },
     })
   },
 
@@ -194,6 +203,7 @@ export const useGameStore = create((set, get) => ({
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
       pendingLayout: null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
+      heroMemory: { trapTriggersByTile: {}, warlordDestroyCount: 0 },
     })
   },
 
@@ -252,6 +262,7 @@ export const useGameStore = create((set, get) => ({
       showCoverageMap: false,
       pendingLayout:   null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
+      heroMemory: saveData.heroMemory ?? { trapTriggersByTile: {}, warlordDestroyCount: 0 },
     })
   },
 
@@ -391,6 +402,22 @@ export const useGameStore = create((set, get) => ({
     })
   },
 
+  // ── Feature 13: commit wave AI observations into heroMemory ───────────────
+  // Called from within the RAF loop right before endWave() so closure data is fresh.
+  _finalizeWaveAI(waveTrapTriggers, waveWarlordDisarms) {
+    const { heroMemory } = get()
+    const updated = { ...heroMemory.trapTriggersByTile }
+    Object.entries(waveTrapTriggers).forEach(([key, count]) => {
+      updated[key] = (updated[key] ?? 0) + count
+    })
+    set({
+      heroMemory: {
+        trapTriggersByTile:  updated,
+        warlordDestroyCount: heroMemory.warlordDestroyCount + waveWarlordDisarms,
+      },
+    })
+  },
+
   startWave() {
     const { waveIndex, layoutData, activeModifier, isEndlessMode, endlessWave, grid } = get()
 
@@ -448,6 +475,20 @@ export const useGameStore = create((set, get) => ({
     // ── Modifier: hero_speed — apply speed multiplier ────────────────────────
     const speedMult = activeModifier === 'hero_speed' ? 1.25 : 1.0
 
+    // ── Feature 13: Hero AI Adaptations — derive per-wave context ─────────────
+    const { heroMemory } = get()
+
+    // 13.1: Build set of "memorized" trap tiles (3+ cumulative triggers, wave 6+)
+    const memorizedDangerKeys = new Set()
+    if (waveIndex >= 5) {
+      Object.entries(heroMemory.trapTriggersByTile).forEach(([key, count]) => {
+        if (count >= 3) memorizedDangerKeys.add(key)
+      })
+    }
+
+    // 13.2: Warlord speed boost — if Warlords have destroyed 3+ traps across prior waves
+    const warlordSpeedBoostActive = heroMemory.warlordDestroyCount >= 3
+
     // ── Apply global event hero modifiers ─────────────────────────────────────
     const heroIds = [...waveConfig.heroes]
     // wrong_dungeon: first 3 heroes flee immediately
@@ -486,6 +527,24 @@ export const useGameStore = create((set, get) => ({
       // wrong_dungeon: first N heroes flee immediately (spawnDelay = 0, flagged to escape)
       if (i < wrongDungeonCount)
         base = { ...base, wrongDungeon: true }
+
+      // ── Feature 13.1: memorized danger speed boost ──────────────────────
+      if (memorizedDangerKeys.size > 0)
+        base = { ...base, memorizedDangerKeys }
+
+      // ── Feature 13.2: Warlord speed boost after 3+ cumulative disarms ──
+      if (warlordSpeedBoostActive && heroId === 'warlord')
+        base = { ...base, speed: base.speed * 1.2 }
+
+      // ── Feature 13.3: Healer clustering (wave 8+) ──────────────────────
+      // Paladins and Clerics always spawn right after the first hero,
+      // regardless of their position in the wave array.
+      if (!isGroupSpawn && waveIndex >= 7 && (heroId === 'paladin' || heroId === 'cleric') && i > 0)
+        base = { ...base, spawnDelay: HERO_SPAWN_STAGGER_MS }
+
+      // ── Feature 13.4: Scout designation (wave 9+, first hero only) ─────
+      if (waveIndex >= 8 && i === 0)
+        base = { ...base, isScout: true }
 
       return base
     })
@@ -541,6 +600,11 @@ export const useGameStore = create((set, get) => ({
     let lastTime = performance.now()
     // Track which hero types have appeared this wave so callouts fire only once
     const seenHeroTypes = new Set()
+
+    // ── Feature 13: AI memory tracking for this wave (closure-local) ──────────
+    const scoutObservedKeys = new Set()   // trap tiles the Scout has triggered
+    const waveTrapTriggers  = {}          // trapKey → trigger count this wave
+    let   waveWarlordDisarms = 0          // warlord trap disarms this wave
 
     // ── Per-wave event timing state (captured in closure) ─────────────────────
     let waveElapsed = 0              // total ms elapsed since wave start
@@ -602,8 +666,20 @@ export const useGameStore = create((set, get) => ({
 
       const result = simulationTick(
         state.heroes, state.grid, deltaMs, state.trapTimers,
-        state.tileUpgrades, state.layoutData.pathTiles, activeEvent
+        state.tileUpgrades, state.layoutData.pathTiles, activeEvent,
+        { scoutObservedKeys }   // feature 13 — scout observations for non-scout DR
       )
+
+      // ── Feature 13: update AI tracking from this tick's events ───────────────
+      result.events.forEach(ev => {
+        if (ev.type === 'scout_observed_trap') {
+          scoutObservedKeys.add(ev.trapKey)
+        } else if (ev.type === 'trap_triggered') {
+          waveTrapTriggers[ev.trapKey] = (waveTrapTriggers[ev.trapKey] ?? 0) + 1
+        } else if (ev.type === 'trap_disarmed' && ev.heroType === 'warlord') {
+          waveWarlordDisarms++
+        }
+      })
 
       // ── Audio + screen shake events ────────────────────────────────────────
       result.events.forEach(ev => {
@@ -832,13 +908,19 @@ export const useGameStore = create((set, get) => ({
 
       // ── Wave-end conditions ──
       // 1. Treasure destroyed — early wave end (bad outcome)
-      if (newTreasureHp <= 0) { get().endWave(); return }
+      if (newTreasureHp <= 0) {
+        get()._finalizeWaveAI(waveTrapTriggers, waveWarlordDisarms)
+        get().endWave(); return
+      }
 
       // 2. All heroes resolved (dead or escaped) — includes boss if spawned
       const waveOver = result.heroes.every(h =>
         h.spawned && (h.state === 'dead' || h.state === 'escaped')
       )
-      if (waveOver) { get().endWave(); return }
+      if (waveOver) {
+        get()._finalizeWaveAI(waveTrapTriggers, waveWarlordDisarms)
+        get().endWave(); return
+      }
 
       const rafId = requestAnimationFrame(loop)
       set({ simulationRef: rafId })

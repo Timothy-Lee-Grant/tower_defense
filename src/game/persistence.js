@@ -55,6 +55,8 @@ export function buildSaveData(state) {
     unlockedTools:  state.unlockedTools,
     treasureHp:    state.treasureHp,         // end-of-last-wave HP (display only)
     treasureMaxHp: state.treasureMaxHp,
+    // Feature 13: persist AI adaptation memory across save/load
+    heroMemory:    state.heroMemory ?? { trapTriggersByTile: {}, warlordDestroyCount: 0 },
   }
 }
 

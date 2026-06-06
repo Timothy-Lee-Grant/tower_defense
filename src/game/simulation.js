@@ -171,12 +171,18 @@ export function createBossHero(bossType, effectiveMult = 1, pathTiles = PATH_TIL
 //   shield_potion     — hero.shieldHp absorbs damage before real HP
 //   know_the_way      — door slow ignored
 
-export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}, pathTiles = PATH_TILES, globalEvent = null) {
+// aiContext (optional, feature 13 — Hero AI Adaptations):
+//   scoutObservedKeys : Set<"col,row"> — traps observed by the Scout this wave;
+//                       non-scout heroes take 20% less damage from these tiles.
+export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}, pathTiles = PATH_TILES, globalEvent = null, aiContext = {}) {
   const events = []
   let treasureDamage = 0
   let goldEarned     = 0
   const updatedHeroes = []
   const updatedTimers = { ...trapTimers }   // shared by Pass 1 (on-path traps) and Pass 2 (towers)
+
+  // ── Feature 13: Hero AI Adaptations ──────────────────────────────────────
+  const { scoutObservedKeys = null } = aiContext
 
   // Pre-compute event flags for hot paths
   const ev_weaponCache     = globalEvent?.id === 'weapon_cache'
@@ -326,7 +332,10 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
     const tarSlow  = (curTileId === TILE.TAR && !hero.immuneToSlow) ? tarMult : 1
     const goldMult = hero.hasGold ? hero.goldSpeedMult : 1
     const slowMult = hero.slowed  ? 0.5 : 1
-    const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000) * doorSlow * tarSlow * goldMult * slowMult
+    // 13.1: memorizedDangerKeys — heroes warned about lethal tiles rush through 30% faster
+    const curTileKey = `${hero.col},${hero.row}`
+    const memDangerMult = (hero.memorizedDangerKeys?.has(curTileKey)) ? 1.3 : 1.0
+    const moveSpeed = hero.speed * TILE_SIZE * (deltaMs / 1000) * doorSlow * tarSlow * goldMult * slowMult * memDangerMult
 
     if (dist <= moveSpeed) {
       // Arrived at next path tile
@@ -360,7 +369,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
         // Phantom skips all non-physical on-path traps
         if (!hero.physicalOnly || PHYSICAL_TILES.has(arrivedId)) {
           const eventFlags = { spikeOverload: ev_spikeOverload }
-          const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers, tileUpgrades, eventFlags)
+          const trapAiCtx  = { isScout: hero.isScout ?? false, scoutObservedKeys }
+          const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers, tileUpgrades, eventFlags, trapAiCtx)
           hero = result.hero
         }
       }
@@ -703,9 +713,17 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 // updatedTimers: mutable timer map (for pit cooldown writes)
 // tileUpgrades:  map of "col,row" → tier
 // eventFlags:    { spikeOverload, goldBounty } from active global event
-function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], updatedTimers = {}, tileUpgrades = {}, eventFlags = {}) {
+// trapAiCtx (feature 13): { isScout: bool, scoutObservedKeys: Set|null }
+//   isScout          — if true, emit scout_observed_trap when this trap damages the hero
+//   scoutObservedKeys — if non-null and trapKey is in the set, apply 20% DR to non-scout heroes
+function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], updatedTimers = {}, tileUpgrades = {}, eventFlags = {}, trapAiCtx = {}) {
   const trapKey = `${tilePos.col},${tilePos.row}`
   const tier = tileUpgrades[trapKey] ?? 0
+
+  // ── Feature 13.4: Scout observation DR ─────────────────────────────────────
+  const { isScout = false, scoutObservedKeys = null } = trapAiCtx
+  // Non-scouts benefit from scout's recon: 20% damage reduction on observed traps
+  const scoutDR = (!isScout && scoutObservedKeys?.has(trapKey)) ? 0.8 : 1.0
 
   switch (tileId) {
 
@@ -714,11 +732,12 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       const effSpike = getEffectiveTool(TILE.SPIKE, tier)
       // Death Corridor (T3): noDisarm — thieves can no longer disarm
       if (hero.canDisarm && !(effSpike?.noDisarm)) {
-        events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
+        events.push({ type: 'trap_disarmed', trapKey, label: hero.label, heroType: hero.type })
         return { hero }
       }
-      const spikeDmg = Math.round((effSpike?.damage ?? 25) * (1 - hero.damageReduction))
+      const spikeDmg = Math.round((effSpike?.damage ?? 25) * (1 - hero.damageReduction) * scoutDR)
       events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
+      if (isScout) events.push({ type: 'scout_observed_trap', trapKey })
       let updatedHero = applyDamageWithShield(hero, spikeDmg)
       // Blade Gauntlet+ (T2/T3): regen timer — set cooldown instead of staying destroyed
       if (tier >= 1 && effSpike?.spikeRegen) {
@@ -727,7 +746,7 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       // Death Corridor (T3): doubleSpike — deal damage twice
       // spike_overload event: also deals damage twice (stacks with Death Corridor)
       if (effSpike?.doubleSpike || eventFlags.spikeOverload) {
-        const dmg2 = Math.round((effSpike?.damage ?? 25) * (1 - updatedHero.damageReduction))
+        const dmg2 = Math.round((effSpike?.damage ?? 25) * (1 - updatedHero.damageReduction) * scoutDR)
         updatedHero = applyDamageWithShield(updatedHero, dmg2)
         events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
       }
@@ -735,12 +754,13 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
     }
     case TILE.BOULDER: {
       if (hero.boulderResist) {
-        events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
+        events.push({ type: 'trap_disarmed', trapKey, label: hero.label, heroType: hero.type })
         return { hero }
       }
       const effBoulder = getEffectiveTool(TILE.BOULDER, tier)
-      const boulderDmg = Math.round((effBoulder?.damage ?? 60) * (1 - hero.damageReduction))
+      const boulderDmg = Math.round((effBoulder?.damage ?? 60) * (1 - hero.damageReduction) * scoutDR)
       events.push({ type: 'trap_triggered', trapKey, trap: 'boulder', label: hero.label })
+      if (isScout) events.push({ type: 'scout_observed_trap', trapKey })
       // Iron Crusher (T3): schedule respawn via timer instead of permanent removal
       if (effBoulder?.boulderRespawn) {
         updatedTimers[`boulder_respawn_${trapKey}`] = effBoulder.boulderRespawn
@@ -754,18 +774,19 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
     case TILE.PIT: {
       if (hero.canDisarm) {
         updatedTimers[`pit_${tilePos.col},${tilePos.row}`] = 0
-        events.push({ type: 'trap_disarmed', trapKey, label: hero.label })
+        events.push({ type: 'trap_disarmed', trapKey, label: hero.label, heroType: hero.type })
         return { hero }
       }
       const pitKey    = `pit_${tilePos.col},${tilePos.row}`
       const isArmed   = !(updatedTimers[pitKey] > 0)
       if (!isArmed) return { hero }
       const effPit    = getEffectiveTool(TILE.PIT, tier)
-      const pitDmg    = Math.round((effPit?.damage ?? 50) * (1 - hero.damageReduction))
+      const pitDmg    = Math.round((effPit?.damage ?? 50) * (1 - hero.damageReduction) * scoutDR)
       const pitCd     = effPit?.pitCooldown ?? 8000
       const pitSlowMs = effPit?.pitSlowMs   ?? 3000
       updatedTimers[pitKey] = pitCd
       events.push({ type: 'trap_triggered', trapKey, trap: 'pit', label: hero.label })
+      if (isScout) events.push({ type: 'scout_observed_trap', trapKey })
       const heroAfterPit = applyDamageWithShield(hero, pitDmg)
       return {
         hero: {
@@ -782,16 +803,18 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       const swinging  = (pendPhase % 4000) < 2000
       if (!swinging) return { hero }
       const effPend   = getEffectiveTool(TILE.PENDULUM, tier)
-      const pendDmg   = Math.round((effPend?.damage ?? 40) * (1 - hero.damageReduction))
+      const pendDmg   = Math.round((effPend?.damage ?? 40) * (1 - hero.damageReduction) * scoutDR)
       events.push({ type: 'trap_triggered', trapKey, trap: 'pendulum', label: hero.label })
+      if (isScout) events.push({ type: 'scout_observed_trap', trapKey })
       return { hero: { ...hero, hp: hero.hp - pendDmg } }
     }
 
     case TILE.ELECTRIC: {
       const effElec  = getEffectiveTool(TILE.ELECTRIC, tier)
-      const elecDmg  = Math.round((effElec?.damage ?? 25) * (1 - hero.damageReduction))
+      const elecDmg  = Math.round((effElec?.damage ?? 25) * (1 - hero.damageReduction) * scoutDR)
       const chainDmgBase = effElec?.electricChain ?? 15
       events.push({ type: 'trap_triggered', trapKey, trap: 'electric', label: hero.label })
+      if (isScout) events.push({ type: 'scout_observed_trap', trapKey })
 
       // Chain targets: Tesla Coil (T3) hits TWO nearest heroes
       const chainCount = effElec?.electricDoubleChain ? 2 : 1
