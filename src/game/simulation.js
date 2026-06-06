@@ -22,6 +22,16 @@ import {
 // Tiles that count as "physical" damage — the only sources that hurt the Phantom.
 const PHYSICAL_TILES = new Set([TILE.SPIKE, TILE.BOULDER, TILE.DART, TILE.SKELETON, TILE.SLIME])
 
+// ── Shield absorption helper ──────────────────────────────────────────────
+// Used for shield_potion event: shieldHp absorbs raw damage before real HP is touched.
+// Takes the hero object and raw damage amount; returns updated hero object.
+function applyDamageWithShield(hero, dmg) {
+  const shield      = hero.shieldHp ?? 0
+  const absorbed    = Math.min(shield, dmg)
+  const remainder   = dmg - absorbed
+  return { ...hero, shieldHp: Math.max(0, shield - absorbed), hp: hero.hp - remainder }
+}
+
 // ── Hero factory ───────────────────────────────────────────────────────────
 
 // hpMult scales HP and healing proportionally to the wave's difficulty.
@@ -86,14 +96,34 @@ export function createHero(heroType, spawnIndex, hpMult = 1, pathTiles = PATH_TI
 // ── Main tick ──────────────────────────────────────────────────────────────
 // Returns { heroes, events, treasureDamage, goldEarned, trapTimers }
 // tileUpgrades: optional map of "col,row" → tier (0-2) for upgrade system
-// pathTiles: the active layout's path (defaults to Catacombs for backwards compat)
+// pathTiles:    the active layout's path (defaults to Catacombs for backwards compat)
+// globalEvent:  optional GLOBAL_EVENTS entry for the active event this wave
+//
+// Modifiers applied per event:
+//   weapon_cache      — towers deal 1.4× damage
+//   monster_fury      — towers fire at 0.667× interval (50% faster)
+//   spike_overload    — spike traps deal damage twice per step
+//   flooding          — lava DoT capped at 5 HP/s (overrides upgrade)
+//   equipment_failure — towers fire at 1.5× interval (slower)
+//   gold_bounty       — kill rewards doubled
+//   shield_potion     — hero.shieldHp absorbs damage before real HP
+//   know_the_way      — door slow ignored
 
-export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}, pathTiles = PATH_TILES) {
+export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades = {}, pathTiles = PATH_TILES, globalEvent = null) {
   const events = []
   let treasureDamage = 0
   let goldEarned     = 0
   const updatedHeroes = []
   const updatedTimers = { ...trapTimers }   // shared by Pass 1 (on-path traps) and Pass 2 (towers)
+
+  // Pre-compute event flags for hot paths
+  const ev_weaponCache     = globalEvent?.id === 'weapon_cache'
+  const ev_monsterFury     = globalEvent?.id === 'monster_fury'
+  const ev_spikeOverload   = globalEvent?.id === 'spike_overload'
+  const ev_flooding        = globalEvent?.id === 'flooding'
+  const ev_equipFail       = globalEvent?.id === 'equipment_failure'
+  const ev_goldBounty      = globalEvent?.id === 'gold_bounty'
+  const ev_knowTheWay      = globalEvent?.id === 'know_the_way'
 
   // ── Pass 1: hero movement and status effects ───────────────────────────
   for (let hero of heroes) {
@@ -107,6 +137,12 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       hero = { ...hero, spawnDelay: hero.spawnDelay - deltaMs }
       if (hero.spawnDelay > 0) { updatedHeroes.push(hero); continue }
       hero = { ...hero, spawned: true, spawnDelay: 0 }
+      // wrong_dungeon event: hero realizes they're in the wrong dungeon and leaves immediately
+      if (hero.wrongDungeon) {
+        events.push({ type: 'hero_escaped', hero: hero.id, label: hero.label, hadGold: false, wrongDungeon: true })
+        updatedHeroes.push({ ...hero, state: 'escaped' })
+        continue
+      }
     }
 
     // ── Stasis: frozen hero — immune to damage, can't move ──────────────────
@@ -129,17 +165,23 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
     // Poison DoT — 3 HP/s (ignored by immuneToPoison heroes)
     if (hero.poisoned && !hero.immuneToPoison) {
       const dmg = 3 * (deltaMs / 1000) * (1 - hero.damageReduction)
-      hero = { ...hero, hp: hero.hp - dmg }
+      hero = applyDamageWithShield(hero, dmg)
     }
 
     // Tile DoT: lava (15 HP/s) and tar (15 HP/s Berserker-only)
     const curTileId = grid[hero.row]?.[hero.col]
+    // curTier / curTool declared here so both the DoT section AND the movement
+    // section can use them (movement section originally declared these but DoT
+    // references were a TDZ bug — fixed by hoisting the declarations).
+    const curTier_h  = tileUpgrades[`${hero.col},${hero.row}`] ?? 0
+    const curTool    = getEffectiveTool(curTileId, curTier_h)
     if (curTileId === TILE.LAVA && !hero.physicalOnly) {
       // Phantom (physicalOnly) is immune to all magical/elemental damage incl. lava
       const lavaTool = getEffectiveTool(TILE.LAVA, tileUpgrades[`${hero.col},${hero.row}`] ?? 0)
-      const lavaRate = lavaTool?.dotDamage ?? 15
+      // Flooding event: lava is diluted to 5 HP/s regardless of upgrade tier
+      const lavaRate = ev_flooding ? 5 : (lavaTool?.dotDamage ?? 15)
       const lavaDmg  = lavaRate * (deltaMs / 1000) * (1 - hero.damageReduction)
-      hero = { ...hero, hp: hero.hp - lavaDmg }
+      hero = applyDamageWithShield(hero, lavaDmg)
       events.push({ type: 'lava_damage', heroId: hero.id })
     }
     if (curTileId === TILE.TAR && hero.immuneToSlow) {
@@ -207,10 +249,9 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
     const dy      = targetY - hero.y
     const dist    = Math.sqrt(dx * dx + dy * dy)
 
-    // Speed modifiers stack multiplicatively
-    const curTier  = tileUpgrades[`${hero.col},${hero.row}`] ?? 0
-    const curTool  = getEffectiveTool(curTileId, curTier)
-    const doorSlow = curTileId === TILE.DOOR ? (curTool?.slow ?? 1) : 1
+    // Speed modifiers stack multiplicatively (curTool already declared above)
+    // know_the_way event: heroes ignore door slows entirely
+    const doorSlow = (curTileId === TILE.DOOR && !ev_knowTheWay) ? (curTool?.slow ?? 1) : 1
     // Tar: upgraded tarSpeedMult; non-immune heroes crawl, immune heroes take DoT
     const tarMult  = curTool?.tarSpeedMult ?? 0.25
     const tarSlow  = (curTileId === TILE.TAR && !hero.immuneToSlow) ? tarMult : 1
@@ -247,7 +288,8 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       ) {
         // Phantom skips all non-physical on-path traps
         if (!hero.physicalOnly || PHYSICAL_TILES.has(arrivedId)) {
-          const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers, tileUpgrades)
+          const eventFlags = { spikeOverload: ev_spikeOverload }
+          const result = handleOnPathTrap(hero, arrivedId, nextTile, events, updatedHeroes, updatedTimers, tileUpgrades, eventFlags)
           hero = result.hero
         }
       }
@@ -287,11 +329,11 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
     // Death check (poison DoT, lava, or trap damage)
     if (hero.hp <= 0 && hero.state === 'moving') {
-      const bonus = hero.hasGold ? GOLD_CARRYING_BONUS : 0
-      goldEarned += hero.goldValue + bonus
+      const killGold = (hero.goldValue + (hero.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
+      goldEarned += killGold
       events.push({
         type: 'hero_killed', hero: hero.id, label: hero.label,
-        gold: hero.goldValue + bonus, hadGold: hero.hasGold,
+        gold: killGold, hadGold: hero.hasGold,
       })
       updatedHeroes.push({ ...hero, state: 'dead', hp: 0 })
       continue
@@ -377,7 +419,10 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
       // Mimic distraction doubles fire rate for this tower
       const hasDistracted  = inRange.some(h => (h.distractedTimer ?? 0) > 0)
-      const fireThreshold  = hasDistracted ? toolDef.attackSpeed * 0.5 : toolDef.attackSpeed
+      // monster_fury: all towers fire 50% faster (0.667× threshold)
+      // equipment_failure: all towers fire 50% slower (1.5× threshold)
+      const eventSpeedMult = ev_monsterFury ? (2/3) : ev_equipFail ? 1.5 : 1.0
+      const fireThreshold  = toolDef.attackSpeed * eventSpeedMult * (hasDistracted ? 0.5 : 1.0)
       if (updatedTimers[key] < fireThreshold) continue
 
       // ── Target selection ────────────────────────────────────────────
@@ -407,7 +452,9 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
         const h = updatedHeroes[idx]
         if (h.state !== 'moving') return
 
-        let dmg = Math.round(toolDef.damage * dmgMult)
+        // weapon_cache: all towers deal 40% extra damage
+        const eventDmgMult = ev_weaponCache ? 1.4 : 1.0
+        let dmg = Math.round(toolDef.damage * dmgMult * eventDmgMult)
         if (h.physicalOnly && !PHYSICAL_TILES.has(tileId)) dmg = 0
         if (h.monsterResist > 0 && toolDef.category === TOOL_CATEGORY.MONSTERS)
           dmg = Math.round(dmg * (1 - h.monsterResist))
@@ -426,9 +473,15 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
         const newMaxHp = toolDef.drainOnHit ? Math.max(1, h.maxHp - dmg) : h.maxHp
         const slowDuration = toolDef.slowTimer ?? 2000
 
+        // shield_potion: shieldHp absorbs damage before real HP
+        const shieldHp = h.shieldHp ?? 0
+        const dmgToShield = Math.min(shieldHp, dmg)
+        const dmgToHp     = dmg - dmgToShield
+
         updatedHeroes[idx] = {
           ...h,
-          hp:          h.hp - dmg,
+          hp:          h.hp - dmgToHp,
+          shieldHp:    Math.max(0, shieldHp - dmgToShield),
           maxHp:       newMaxHp,
           curseStacks: newCurseStacks,
           poisoned:    h.poisoned || (!h.immuneToPoison && (toolDef.poisonOnHit ?? false)),
@@ -438,11 +491,11 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
         }
 
         if (updatedHeroes[idx].hp <= 0 && updatedHeroes[idx].state === 'moving') {
-          const bonus = updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0
-          goldEarned += updatedHeroes[idx].goldValue + bonus
+          const killGold = (updatedHeroes[idx].goldValue + (updatedHeroes[idx].hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
+          goldEarned += killGold
           events.push({
             type: 'hero_killed', hero: updatedHeroes[idx].id, label: updatedHeroes[idx].label,
-            gold: updatedHeroes[idx].goldValue + bonus, hadGold: updatedHeroes[idx].hasGold,
+            gold: killGold, hadGold: updatedHeroes[idx].hasGold,
           })
           updatedHeroes[idx] = { ...updatedHeroes[idx], state: 'dead', hp: 0 }
         }
@@ -476,18 +529,18 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
       // ── Death Knight aura: 5 HP/s to all heroes within 1.5 tiles ────
       if (toolDef.deathKnightAura) {
-        const auraDmg = 5 * (deltaMs / 1000)
+        const auraDmg = 5 * (deltaMs / 1000) * (ev_weaponCache ? 1.4 : 1.0)
         for (let i = 0; i < updatedHeroes.length; i++) {
           const h = updatedHeroes[i]
           if (!h.spawned || h.state !== 'moving') continue
           if (Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2) > 1.5) continue
           const reduced = auraDmg * (1 - h.damageReduction)
-          updatedHeroes[i] = { ...h, hp: h.hp - reduced }
+          updatedHeroes[i] = applyDamageWithShield(h, reduced)
           if (updatedHeroes[i].hp <= 0) {
-            const bonus = h.hasGold ? GOLD_CARRYING_BONUS : 0
-            goldEarned += h.goldValue + bonus
+            const killGold = (h.goldValue + (h.hasGold ? GOLD_CARRYING_BONUS : 0)) * (ev_goldBounty ? 2 : 1)
+            goldEarned += killGold
             events.push({ type: 'hero_killed', hero: h.id, label: h.label,
-              gold: h.goldValue + bonus, hadGold: h.hasGold })
+              gold: killGold, hadGold: h.hasGold })
             updatedHeroes[i] = { ...updatedHeroes[i], state: 'dead', hp: 0 }
           }
         }
@@ -573,8 +626,9 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 // ── On-path trap interactions ──────────────────────────────────────────────
 // updatedHeroes: mutable array of heroes processed so far this tick (for electric chain)
 // updatedTimers: mutable timer map (for pit cooldown writes)
-// tileUpgrades: map of "col,row" → tier
-function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], updatedTimers = {}, tileUpgrades = {}) {
+// tileUpgrades:  map of "col,row" → tier
+// eventFlags:    { spikeOverload, goldBounty } from active global event
+function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], updatedTimers = {}, tileUpgrades = {}, eventFlags = {}) {
   const trapKey = `${tilePos.col},${tilePos.row}`
   const tier = tileUpgrades[trapKey] ?? 0
 
@@ -590,15 +644,16 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       }
       const spikeDmg = Math.round((effSpike?.damage ?? 25) * (1 - hero.damageReduction))
       events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
-      let updatedHero = { ...hero, hp: hero.hp - spikeDmg }
+      let updatedHero = applyDamageWithShield(hero, spikeDmg)
       // Blade Gauntlet+ (T2/T3): regen timer — set cooldown instead of staying destroyed
       if (tier >= 1 && effSpike?.spikeRegen) {
         updatedTimers[`spike_regen_${trapKey}`] = effSpike.spikeRegen
       }
       // Death Corridor (T3): doubleSpike — deal damage twice
-      if (effSpike?.doubleSpike) {
-        const dmg2 = Math.round((effSpike.damage ?? 25) * (1 - hero.damageReduction))
-        updatedHero = { ...updatedHero, hp: updatedHero.hp - dmg2 }
+      // spike_overload event: also deals damage twice (stacks with Death Corridor)
+      if (effSpike?.doubleSpike || eventFlags.spikeOverload) {
+        const dmg2 = Math.round((effSpike?.damage ?? 25) * (1 - updatedHero.damageReduction))
+        updatedHero = applyDamageWithShield(updatedHero, dmg2)
         events.push({ type: 'trap_triggered', trapKey, trap: 'spike', label: hero.label })
       }
       return { hero: updatedHero }
@@ -615,7 +670,7 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       if (effBoulder?.boulderRespawn) {
         updatedTimers[`boulder_respawn_${trapKey}`] = effBoulder.boulderRespawn
       }
-      return { hero: { ...hero, hp: hero.hp - boulderDmg } }
+      return { hero: applyDamageWithShield(hero, boulderDmg) }
     }
     // LAVA + TAR handled as continuous DoT in Pass 1, not on arrival
 
@@ -636,10 +691,10 @@ function handleOnPathTrap(hero, tileId, tilePos, events, updatedHeroes = [], upd
       const pitSlowMs = effPit?.pitSlowMs   ?? 3000
       updatedTimers[pitKey] = pitCd
       events.push({ type: 'trap_triggered', trapKey, trap: 'pit', label: hero.label })
+      const heroAfterPit = applyDamageWithShield(hero, pitDmg)
       return {
         hero: {
-          ...hero,
-          hp:       hero.hp - pitDmg,
+          ...heroAfterPit,
           slowed:   hero.immuneToSlow ? hero.slowed : true,
           slowTimer: hero.immuneToSlow ? hero.slowTimer : Math.max(hero.slowTimer, pitSlowMs),
         },

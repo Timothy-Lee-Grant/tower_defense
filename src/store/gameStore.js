@@ -9,6 +9,7 @@ import {
 import { createHero, simulationTick } from '../game/simulation.js'
 import { audio } from '../audio/audioEngine.js'
 import { getHeroCallout } from '../game/gerald.js'
+import { getEventForWave, getRandomEvent, GLOBAL_EVENTS } from '../game/globalEvents.js'
 import {
   writeSave, recordRunEnd, SAVE_SLOTS,
   recordCampaignNode, readCampaignProgress, recordEndlessHigh, readEndlessHigh,
@@ -76,6 +77,12 @@ export const useGameStore = create((set, get) => ({
   upgradeCards:   [],
   screenShake:    0,   // current shake intensity; consumed + decayed by DungeonGrid
 
+  // ── Global Events state ────────────────────────────────────────────────
+  activeGlobalEvent:  null,   // current GLOBAL_EVENTS entry or null
+  showEventOverlay:   false,  // show dramatic announcement popup
+  caveInTiles:        [],     // [{col,row}] — off-path towers that will collapse mid-wave
+  holyGroundZone:     null,   // {minCol,minRow,maxCol,maxRow} — no-placement zone this wave
+
   // Plan-phase analysis overlays (reset to false when wave starts)
   showPathPreview: false,
   showCoverageMap: false,
@@ -129,6 +136,7 @@ export const useGameStore = create((set, get) => ({
       battleLog: [], attackFlashes: [],
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
       pendingLayout: null,
+      activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
     })
   },
 
@@ -169,6 +177,7 @@ export const useGameStore = create((set, get) => ({
       attackFlashes: [],
       unlockedTools: DUNGEON_TOOLS.filter(t => t.unlocked).map(t => t.id),
       pendingLayout: null,
+      activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
     })
   },
 
@@ -226,6 +235,7 @@ export const useGameStore = create((set, get) => ({
       showPathPreview: false,
       showCoverageMap: false,
       pendingLayout:   null,
+      activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
     })
   },
 
@@ -257,12 +267,18 @@ export const useGameStore = create((set, get) => ({
 
   // ── Emergency placement during waves — costs from bank at 1.5× ────────────
   bankPlaceTile(col, row) {
-    const { grid, selectedTool, bank, unlockedTools, phase } = get()
+    const { grid, selectedTool, bank, unlockedTools, phase, holyGroundZone } = get()
     if (phase !== PHASE.WAVE) return
     if (!selectedTool || !unlockedTools.includes(selectedTool)) return
 
     const cur = grid[row]?.[col]
     if (!cur || cur === TILE.ENTRANCE || cur === TILE.TREASURE) return
+
+    // Holy Ground event: block emergency placements in the blessed zone
+    if (holyGroundZone) {
+      const { minCol, minRow, maxCol, maxRow } = holyGroundZone
+      if (col >= minCol && col <= maxCol && row >= minRow && row <= maxRow) return
+    }
 
     const def = DUNGEON_TOOLS.find(t => t.id === selectedTool)
     if (!def) return
@@ -328,7 +344,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   startWave() {
-    const { waveIndex, layoutData, activeModifier, isEndlessMode, endlessWave } = get()
+    const { waveIndex, layoutData, activeModifier, isEndlessMode, endlessWave, grid } = get()
 
     // ── Endless mode: generate wave beyond WAVE_CONFIGS ──────────────────────
     const isEndlessWave = waveIndex >= WAVE_CONFIGS.length
@@ -338,7 +354,7 @@ export const useGameStore = create((set, get) => ({
           hpMult: 9.0 * Math.pow(1.15, waveIndex - (WAVE_CONFIGS.length - 1)),
           gold:   600,
           label:  `Endless Wave ${waveIndex - WAVE_CONFIGS.length + 2}`,
-          heroes: WAVE_CONFIGS[WAVE_CONFIGS.length - 1].heroes,   // repeat final composition
+          heroes: WAVE_CONFIGS[WAVE_CONFIGS.length - 1].heroes,
         }
       : (WAVE_CONFIGS[waveIndex] ?? WAVE_CONFIGS[WAVE_CONFIGS.length - 1])
 
@@ -346,53 +362,185 @@ export const useGameStore = create((set, get) => ({
     const waveMult = waveConfig.hpMult ?? 1
     const effectiveMult = 1.0 + (waveMult - 1.0) * diff.hpScaling
 
+    // ── Determine global event for this wave ──────────────────────────────────
+    const globalEvent = isEndlessWave
+      ? (Math.random() < 0.6 ? getRandomEvent() : null)   // 60% chance in endless
+      : getEventForWave(waveIndex)
+
+    // ── Prepare cave-in tiles ─────────────────────────────────────────────────
+    let caveInTiles = []
+    if (globalEvent?.id === 'cave_in') {
+      const offPathTowers = []
+      for (let r = 0; r < GRID_ROWS; r++) {
+        for (let c = 0; c < GRID_COLS; c++) {
+          const tId = grid[r]?.[c]
+          if (!tId) continue
+          const def = DUNGEON_TOOLS.find(t => t.id === tId && t.placesOn === 'open')
+          if (def) offPathTowers.push({ col: c, row: r })
+        }
+      }
+      // Shuffle and pick up to 3
+      for (let i = offPathTowers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [offPathTowers[i], offPathTowers[j]] = [offPathTowers[j], offPathTowers[i]]
+      }
+      caveInTiles = offPathTowers.slice(0, 3)
+    }
+
+    // ── Prepare holy ground zone ──────────────────────────────────────────────
+    let holyGroundZone = null
+    if (globalEvent?.id === 'holy_ground') {
+      const minCol = Math.floor(Math.random() * (GRID_COLS - 3))
+      const minRow = Math.floor(Math.random() * (GRID_ROWS - 3))
+      holyGroundZone = { minCol, minRow, maxCol: minCol + 2, maxRow: minRow + 2 }
+    }
+
     // ── Modifier: group_spawn — remove stagger delay ─────────────────────────
     const isGroupSpawn = activeModifier === 'group_spawn'
     // ── Modifier: hero_speed — apply speed multiplier ────────────────────────
     const speedMult = activeModifier === 'hero_speed' ? 1.25 : 1.0
 
-    const heroes = waveConfig.heroes.map((heroId, i) => {
-      const base = createHero(HERO_TYPES[heroId], isGroupSpawn ? 0 : i, effectiveMult, layoutData.pathTiles)
-      if (speedMult !== 1.0) return { ...base, speed: base.speed * speedMult }
-      // Modifier: thieves_disarm_all — thieves can disarm any on-path trap
+    // ── Apply global event hero modifiers ─────────────────────────────────────
+    const heroIds = [...waveConfig.heroes]
+    // wrong_dungeon: first 3 heroes flee immediately
+    const wrongDungeonCount = globalEvent?.id === 'wrong_dungeon' ? 3 : 0
+
+    const heroes = heroIds.map((heroId, i) => {
+      let base = createHero(HERO_TYPES[heroId], isGroupSpawn ? 0 : i, effectiveMult, layoutData.pathTiles)
+
+      // Campaign modifier overrides
+      if (speedMult !== 1.0) base = { ...base, speed: base.speed * speedMult }
       if (activeModifier === 'thieves_disarm_all' && heroId === 'thief')
-        return { ...base, canDisarmAll: true }
+        base = { ...base, canDisarmAll: true }
+
+      // ── Global event hero mods ──────────────────────────────────────────
+      if (globalEvent?.id === 'heroes_motivated')
+        base = { ...base, speed: base.speed * 1.3 }
+
+      if (globalEvent?.id === 'shield_potion')
+        base = { ...base, shieldHp: 150 }
+
+      if (globalEvent?.id === 'blessed') {
+        base = {
+          ...base,
+          selfHealRate:  base.selfHealRate  * 2,
+          partyHealRate: base.partyHealRate * 2,
+          healAmount:    base.healAmount    * 2,
+        }
+      }
+
+      if (globalEvent?.id === 'know_the_way')
+        base = { ...base, doorImmune: true }   // checked in simulation doorSlow logic
+
+      if (globalEvent?.id === 'armored_up')
+        base = { ...base, damageReduction: Math.min(0.9, (base.damageReduction ?? 0) + 0.2) }
+
+      // wrong_dungeon: first N heroes flee immediately (spawnDelay = 0, flagged to escape)
+      if (i < wrongDungeonCount)
+        base = { ...base, wrongDungeon: true }
+
       return base
     })
 
     audio.play('wave_start')
 
+    // Build initial battle log with event announcement
+    const initLog = [`⚔ Wave ${waveIndex + 1}: ${waveConfig.label}`]
+    if (globalEvent) {
+      initLog.push(`${globalEvent.emoji} EVENT: ${globalEvent.name} — ${globalEvent.description}`)
+    }
+
     set({
-      phase:         PHASE.WAVE,
+      phase:           PHASE.WAVE,
       heroes,
-      // Reset treasure HP to difficulty-correct ceiling each wave.
-      treasureHp:    get().treasureMaxHp,
-      heroesKilled:  0,
+      treasureHp:      get().treasureMaxHp,
+      heroesKilled:    0,
       heroesEscapedWithGold: 0,
       heroesEscapedEmpty:    0,
-      battleLog: [`⚔ Wave ${waveIndex + 1}: ${waveConfig.label}`],
+      battleLog:       initLog,
       goldEarnedThisWave: 0,
       goldStolenThisWave: 0,
-      trapTimers: {},
-      attackFlashes: [],
+      trapTimers:      {},
+      attackFlashes:   [],
       showPathPreview: false,
       showCoverageMap: false,
+      // Global event state
+      activeGlobalEvent: globalEvent,
+      showEventOverlay:  globalEvent ? true : false,
+      caveInTiles,
+      holyGroundZone,
     })
+
+    // Auto-dismiss overlay after 3.5 seconds
+    if (globalEvent) {
+      setTimeout(() => set({ showEventOverlay: false }), 3500)
+    }
 
     let lastTime = performance.now()
     // Track which hero types have appeared this wave so callouts fire only once
     const seenHeroTypes = new Set()
 
+    // ── Per-wave event timing state (captured in closure) ─────────────────────
+    let waveElapsed = 0              // total ms elapsed since wave start
+    let caveInFired = false          // has cave-in collapse happened yet
+    const caveInDelay = 6000 + Math.random() * 8000  // 6–14 seconds
+    let geraldSpeechFired = false    // has gerald_speech pause started
+    const geraldSpeechDelay = 7000 + Math.random() * 5000  // 7–12 seconds
+    let geraldSpeechEnd = 0          // abs timestamp when speech pause ends
+    const nextTremorAt = { t: 4000 + Math.random() * 4000 } // first tremor after 4–8s
+
     const loop = (now) => {
       const state = get()
       if (state.phase !== PHASE.WAVE) return
 
-      const deltaMs = Math.min(now - lastTime, 100) // cap delta to avoid huge jumps
+      let deltaMs = Math.min(now - lastTime, 100) // cap delta to avoid huge jumps
       lastTime = now
+      waveElapsed += deltaMs
+
+      // ── Gerald's speech pause: freeze all heroes for 3 s ─────────────────────
+      const activeEvent = state.activeGlobalEvent
+      if (activeEvent?.id === 'gerald_speech') {
+        if (!geraldSpeechFired && waveElapsed >= geraldSpeechDelay) {
+          geraldSpeechFired = true
+          geraldSpeechEnd   = now + 3000
+          const speechLog = `💀 Gerald: "${activeEvent.geraldLine.replace(/^"/, '').replace(/"$/, '')}"`
+          set({ battleLog: [...state.battleLog.slice(-28), '🛑 ALL HEROES STOP! Gerald demands your attention.', speechLog] })
+          audio.play('wave_start')   // dramatic sting
+        }
+        if (now < geraldSpeechEnd) {
+          // During the speech pause, skip simulation (heroes frozen)
+          const rafId = requestAnimationFrame(loop)
+          set({ simulationRef: rafId })
+          return
+        }
+      }
+
+      // ── Cave-in: collapse off-path towers mid-wave ────────────────────────────
+      if (activeEvent?.id === 'cave_in' && !caveInFired && waveElapsed >= caveInDelay) {
+        caveInFired = true
+        const tiles = get().caveInTiles
+        if (tiles.length > 0) {
+          const newGrid = get().grid.map(r => [...r])
+          const newUpgrades = { ...get().tileUpgrades }
+          tiles.forEach(({ col, row }) => {
+            newGrid[row][col] = TILE.EMPTY
+            delete newUpgrades[`${col},${row}`]
+          })
+          set({ grid: newGrid, tileUpgrades: newUpgrades, caveInTiles: [] })
+          get().triggerScreenShake(6)
+          set({ battleLog: [...get().battleLog.slice(-28), '💥 CAVE-IN! Three structures have collapsed!'] })
+        }
+      }
+
+      // ── Tremors: random screen shakes ────────────────────────────────────────
+      if (activeEvent?.id === 'tremors' && waveElapsed >= nextTremorAt.t) {
+        get().triggerScreenShake(3 + Math.random() * 4)
+        nextTremorAt.t = waveElapsed + 3000 + Math.random() * 5000  // next tremor in 3–8 s
+      }
 
       const result = simulationTick(
         state.heroes, state.grid, deltaMs, state.trapTimers,
-        state.tileUpgrades, state.layoutData.pathTiles
+        state.tileUpgrades, state.layoutData.pathTiles, activeEvent
       )
 
       // ── Audio + screen shake events ────────────────────────────────────────
@@ -449,9 +597,12 @@ export const useGameStore = create((set, get) => ({
             : `⚔️ ${ev.label} defeated (+${ev.gold}g)`
         }
         if (ev.type === 'treasure_reached') return `💰 ${ev.label} grabbed the gold — heading back!`
-        if (ev.type === 'hero_escaped')     return ev.hadGold
-          ? `🏃 ${ev.label} escaped WITH the gold!`
-          : `💨 ${ev.label} fled empty-handed.`
+        if (ev.type === 'hero_escaped') {
+          if (ev.wrongDungeon) return `🗺️ ${ev.label} left immediately. Wrong dungeon.`
+          return ev.hadGold
+            ? `🏃 ${ev.label} escaped WITH the gold!`
+            : `💨 ${ev.label} fled empty-handed.`
+        }
         if (ev.type === 'trap_triggered') {
           const trapNames = { spike: 'spike plate', boulder: 'rolling boulder', pit: 'pit trap',
             pendulum: 'pendulum', electric: 'electric floor', stasis: 'stasis field' }
@@ -577,6 +728,8 @@ export const useGameStore = create((set, get) => ({
     const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
     audio.play('wave_cleared')
+    // Clear global event state between waves
+    set({ activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null })
 
     const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
 

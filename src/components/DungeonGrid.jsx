@@ -79,6 +79,14 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   const showCoverageMap  = useGameStore(s => s.showCoverageMap)
   const waveIndex        = useGameStore(s => s.waveIndex)
 
+  // Global events visual state
+  const caveInTiles    = useGameStore(s => s.caveInTiles)
+  const holyGroundZone = useGameStore(s => s.holyGroundZone)
+  const caveInTilesRef   = useRef(caveInTiles)
+  const holyGroundRef    = useRef(holyGroundZone)
+  caveInTilesRef.current = caveInTiles
+  holyGroundRef.current  = holyGroundZone
+
   const hoveredTile      = useRef(null)
   const animFrame        = useRef(null)
 
@@ -411,6 +419,67 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         ctx.fillStyle = count >= 3 ? 'rgba(80,255,100,0.9)' : 'rgba(180,255,180,0.8)'
         ctx.fillText(count, pt.col * TILE_SIZE + TILE_SIZE / 2, pt.row * TILE_SIZE + TILE_SIZE / 2)
       }
+    }
+
+    // ── 2c-ii. Cave-in warning: pulsing red/orange hazard tint on doomed tiles ──
+    const caveInList = caveInTilesRef.current
+    if (caveInList && caveInList.length > 0) {
+      const pulse = 0.45 + 0.35 * Math.sin(t * 0.012)   // 0.1 → 0.8 oscillation
+      ctx.save()
+      caveInList.forEach(({ col, row }) => {
+        const x = col * TILE_SIZE
+        const y = row * TILE_SIZE
+        // Hazard fill
+        ctx.fillStyle = `rgba(200,60,10,${pulse * 0.55})`
+        ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE)
+        // Hazard border
+        ctx.strokeStyle = `rgba(255,120,30,${pulse * 0.9})`
+        ctx.lineWidth   = 2
+        ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2)
+        // Warning icon
+        ctx.font          = `bold ${Math.round(TILE_SIZE * 0.45)}px sans-serif`
+        ctx.textAlign     = 'center'
+        ctx.textBaseline  = 'middle'
+        ctx.globalAlpha   = pulse * 0.85
+        ctx.fillStyle     = '#ffcc44'
+        ctx.fillText('💥', x + TILE_SIZE / 2, y + TILE_SIZE / 2)
+        ctx.globalAlpha   = 1
+      })
+      ctx.restore()
+    }
+
+    // ── 2c-iii. Holy ground zone: soft blue/gold shimmer, no-placement ────────
+    const hgz = holyGroundRef.current
+    if (hgz) {
+      const shimmer = 0.12 + 0.08 * Math.sin(t * 0.005)
+      ctx.save()
+      for (let r = hgz.minRow; r <= hgz.maxRow; r++) {
+        for (let c = hgz.minCol; c <= hgz.maxCol; c++) {
+          ctx.fillStyle = `rgba(160,200,255,${shimmer})`
+          ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        }
+      }
+      // Outer border
+      ctx.strokeStyle = `rgba(160,200,255,${shimmer * 4})`
+      ctx.lineWidth   = 2
+      ctx.setLineDash([4, 3])
+      ctx.strokeRect(
+        hgz.minCol * TILE_SIZE, hgz.minRow * TILE_SIZE,
+        (hgz.maxCol - hgz.minCol + 1) * TILE_SIZE,
+        (hgz.maxRow - hgz.minRow + 1) * TILE_SIZE
+      )
+      ctx.setLineDash([])
+      // Label
+      ctx.font          = `bold 9px monospace`
+      ctx.textAlign     = 'center'
+      ctx.textBaseline  = 'top'
+      ctx.fillStyle     = `rgba(200,230,255,0.85)`
+      ctx.fillText(
+        '✨ HOLY',
+        (hgz.minCol + (hgz.maxCol - hgz.minCol) / 2) * TILE_SIZE + TILE_SIZE / 2,
+        hgz.minRow * TILE_SIZE + 3
+      )
+      ctx.restore()
     }
 
     // ── 2d. Path preview overlay ──────────────────────────────────────────────

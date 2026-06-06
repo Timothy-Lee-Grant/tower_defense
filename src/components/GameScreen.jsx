@@ -8,6 +8,7 @@ import DungeonGrid from './DungeonGrid.jsx'
 import ToolPalette from './ToolPalette.jsx'
 import BattleLog from './BattleLog.jsx'
 import HUD from './HUD.jsx'
+import GlobalEventOverlay from './GlobalEventOverlay.jsx'
 
 export default function GameScreen() {
   const phase          = useGameStore(s => s.phase)
@@ -66,6 +67,9 @@ export default function GameScreen() {
             onTileClick={handleTileClick}
             onTileRightClick={handleRightClick}
           />
+          {/* Global Event announcement overlay — shown at wave start */}
+          <GlobalEventOverlay />
+
           {/* Upgrade panel overlaid on grid */}
           {upgradeTarget && (
             <UpgradePanel
