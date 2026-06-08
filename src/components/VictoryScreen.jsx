@@ -2,17 +2,27 @@ import React from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { WAVE_CONFIGS } from '../game/constants.js'
 import { selectVictoryComment } from '../game/gerald.js'
+import { getAchievement } from '../game/scoring.js'
+import { readLeaderboard } from '../game/persistence.js'
 
 export default function VictoryScreen() {
-  const runKills      = useGameStore(s => s.runKills)     // total across all 14 waves
-  const bank          = useGameStore(s => s.bank)
-  const treasureHp    = useGameStore(s => s.treasureHp)
-  const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
+  const runKills                  = useGameStore(s => s.runKills)
+  const bank                      = useGameStore(s => s.bank)
+  const treasureHp                = useGameStore(s => s.treasureHp)
+  const treasureMaxHp             = useGameStore(s => s.treasureMaxHp)
+  const runScore                  = useGameStore(s => s.runScore)
+  const leaderboardRank           = useGameStore(s => s.leaderboardRank)
+  const difficulty                = useGameStore(s => s.difficulty)
+  const newlyUnlockedAchievements = useGameStore(s => s.newlyUnlockedAchievements)
   const goToMenu           = useGameStore(s => s.goToMenu)
   const startEndlessMode   = useGameStore(s => s.startEndlessMode)
   const goToCampaign       = useGameStore(s => s.goToCampaign)
   const campaignNodeId     = useGameStore(s => s.campaignNodeId)
   const isEndlessMode      = useGameStore(s => s.isEndlessMode)
+
+  // Read current leaderboard for the difficulty
+  const leaderboard = readLeaderboard()[difficulty] ?? []
+  const RANK_LABELS = ['🥇', '🥈', '🥉', '4th', '5th']
 
   return (
     <div style={s.root}>
@@ -28,10 +38,60 @@ export default function VictoryScreen() {
         </div>
 
         <div style={s.statsRow}>
-          <StatCard value={WAVE_CONFIGS.length} label="Waves Survived" color="var(--gold-bright)" />
-          <StatCard value={runKills}              label="Heroes Slain"   color="var(--bone)" />
-          <StatCard value={`${bank}g`}           label="Gold Earned"    color="var(--gold-bright)" />
+          <StatCard value={WAVE_CONFIGS.length}       label="Waves Survived" color="var(--gold-bright)" />
+          <StatCard value={runKills}                  label="Heroes Slain"   color="var(--bone)" />
+          <StatCard value={`${bank}g`}               label="Gold Earned"    color="var(--gold-bright)" />
+          <StatCard value={runScore.toLocaleString()} label="Final Score"    color="var(--gold-bright)" />
         </div>
+
+        {/* Leaderboard rank banner */}
+        {leaderboardRank !== null && leaderboardRank <= 5 && (
+          <div style={s.rankBanner}>
+            <span style={s.rankEmoji}>{RANK_LABELS[leaderboardRank - 1] ?? `#${leaderboardRank}`}</span>
+            <span style={s.rankText}>
+              {leaderboardRank === 1
+                ? 'New high score on this difficulty!'
+                : `Rank #${leaderboardRank} on ${difficulty} difficulty`}
+            </span>
+          </div>
+        )}
+
+        {/* Mini leaderboard — top 5 for this difficulty */}
+        {leaderboard.length > 0 && (
+          <div style={s.leaderboard}>
+            <div style={s.lbHeader}>🏆 Gerald's Hall of Excellence — {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</div>
+            {leaderboard.map((entry, i) => (
+              <div key={i} style={{
+                ...s.lbRow,
+                background: leaderboardRank === i + 1 ? 'rgba(232,196,74,0.1)' : undefined,
+              }}>
+                <span style={s.lbRank}>{RANK_LABELS[i] ?? `#${i + 1}`}</span>
+                <span style={s.lbScore}>{entry.score.toLocaleString()}</span>
+                <span style={s.lbMeta}>{entry.kills} kills · {entry.waves}w · {new Date(entry.date).toLocaleDateString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Achievement unlocks */}
+        {newlyUnlockedAchievements.length > 0 && (
+          <div style={s.achieveSection}>
+            <div style={s.achieveHeader}>🎖 Achievement Unlocked</div>
+            {newlyUnlockedAchievements.map(id => {
+              const a = getAchievement(id)
+              if (!a) return null
+              return (
+                <div key={id} style={s.achieveCard}>
+                  <span style={s.achieveEmoji}>{a.emoji}</span>
+                  <div>
+                    <div style={s.achieveName}>{a.name}</div>
+                    <div style={s.achieveDesc}>{a.desc}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div style={s.memo}>
           <span style={s.memoFrom}>Final Memo from Gerald, Dungeon Operations</span>
@@ -98,7 +158,7 @@ const s = {
     color: 'var(--text-secondary)', fontSize: '1.1rem',
   },
   statsRow: {
-    display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem',
+    display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.75rem',
   },
   statCard: {
     background: 'rgba(255,255,255,0.04)',
@@ -141,6 +201,65 @@ const s = {
     padding: '0.65rem 1.4rem',
     fontSize: '0.85rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.04em',
+  },
+  // Rank banner
+  rankBanner: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+    background: 'rgba(232,196,74,0.08)', border: '1px solid rgba(232,196,74,0.25)',
+    borderRadius: 8, padding: '0.65rem 1rem',
+  },
+  rankEmoji: { fontSize: '1.4rem' },
+  rankText: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.78rem', color: 'var(--gold-bright)',
+    letterSpacing: '0.05em',
+  },
+  // Leaderboard
+  leaderboard: {
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: 8, padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem',
+  },
+  lbHeader: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.12em',
+    color: 'var(--gold-dim)', marginBottom: '0.4rem', textTransform: 'uppercase', textAlign: 'left',
+  },
+  lbRow: {
+    display: 'flex', alignItems: 'center', gap: '0.75rem',
+    padding: '0.3rem 0.5rem', borderRadius: 5,
+  },
+  lbRank: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.75rem', fontWeight: 700,
+    color: 'var(--gold-bright)', minWidth: '2.2rem', textAlign: 'center',
+  },
+  lbScore: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.88rem', fontWeight: 700,
+    color: 'var(--bone)', minWidth: '5rem',
+  },
+  lbMeta: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.78rem', color: 'var(--text-muted)',
+  },
+  // Achievements
+  achieveSection: {
+    background: 'rgba(255,210,60,0.05)', border: '1px solid rgba(255,210,60,0.2)',
+    borderRadius: 8, padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.45rem',
+  },
+  achieveHeader: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.12em',
+    color: 'rgba(255,220,80,0.8)', textTransform: 'uppercase', marginBottom: '0.1rem', textAlign: 'left',
+  },
+  achieveCard: {
+    display: 'flex', alignItems: 'flex-start', gap: '0.65rem',
+    background: 'rgba(255,200,50,0.06)', border: '1px solid rgba(255,200,50,0.15)',
+    borderRadius: 6, padding: '0.45rem 0.7rem', textAlign: 'left',
+  },
+  achieveEmoji: { fontSize: '1.2rem', flexShrink: 0, lineHeight: 1 },
+  achieveName: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.7rem', fontWeight: 700,
+    color: 'var(--gold-bright)', letterSpacing: '0.04em',
+  },
+  achieveDesc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.35,
   },
   campaignBtn: {
     background: 'rgba(200,160,72,0.10)', color: '#c8a048',

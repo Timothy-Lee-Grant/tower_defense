@@ -14,7 +14,11 @@ import { getEventForWave, getRandomEvent, GLOBAL_EVENTS } from '../game/globalEv
 import {
   writeSave, recordRunEnd, SAVE_SLOTS,
   recordCampaignNode, readCampaignProgress, recordEndlessHigh, readEndlessHigh,
+  unlockAchievement, recordLeaderboardEntry,
 } from '../game/persistence.js'
+import {
+  calcWaveScore, checkWaveAchievements, checkRunAchievements, getAchievement,
+} from '../game/scoring.js'
 
 // ── Feature 14.1: Combo definitions ──────────────────────────────────────────
 // Each entry is checked against each hero_killed event in the RAF loop.
@@ -168,6 +172,23 @@ export const useGameStore = create((set, get) => ({
     warlordDestroyCount: 0,   // warlord trap-disarms across all waves
   },
 
+  // ── Feature 15: Scoring ───────────────────────────────────────────────────
+  waveScore:             0,    // score for the wave that just ended (shown in ResultsScreen)
+  runScore:              0,    // cumulative score across all waves this run
+  waveStartGold:         0,    // gold budget given at start of wave (for efficiency calc)
+  goldSpentThisWave:     0,    // waveStartGold - gold after wave-gold is set in startWave
+  comboBonusGold:        0,    // total combo bonus gold accumulated this wave
+  minTreasureHpThisRun:  null, // lowest treasureHp ever seen this run (for Perfect Run)
+  newlyUnlockedAchievements: [], // achievement IDs unlocked this wave (cleared each wave)
+
+  // ── Feature 15: Per-wave achievement tracking ─────────────────────────────
+  layeredDefenseKilled:        false, // hero died with all 4 debuffs
+  rockBottomReached:           false, // treasure HP hit 1
+  oopsTriggered:               false, // thief disarmed last spike
+  hiredWrongMonstersTriggered: false, // idol+bat+shadow hit same hero in 2 s
+  tileSwapCounts:              {},    // "col,row" → times the tile was removed this plan phase
+  leaderboardRank:             null,  // 1-based rank of this run's score (null if not top-5)
+
   // Plan-phase analysis overlays (reset to false when wave starts)
   showPathPreview: false,
   showCoverageMap: false,
@@ -223,6 +244,11 @@ export const useGameStore = create((set, get) => ({
       pendingLayout: null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
       heroMemory: { trapTriggersByTile: {}, warlordDestroyCount: 0 },
+      // Feature 15 reset
+      waveScore: 0, runScore: 0, waveStartGold: 0, goldSpentThisWave: 0, comboBonusGold: 0,
+      minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
+      layeredDefenseKilled: false, rockBottomReached: false,
+      oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
     })
   },
 
@@ -265,6 +291,11 @@ export const useGameStore = create((set, get) => ({
       pendingLayout: null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
       heroMemory: { trapTriggersByTile: {}, warlordDestroyCount: 0 },
+      // Feature 15 reset
+      waveScore: 0, runScore: 0, waveStartGold: 0, goldSpentThisWave: 0, comboBonusGold: 0,
+      minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
+      layeredDefenseKilled: false, rockBottomReached: false,
+      oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
     })
   },
 
@@ -324,6 +355,11 @@ export const useGameStore = create((set, get) => ({
       pendingLayout:   null,
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
       heroMemory: saveData.heroMemory ?? { trapTriggersByTile: {}, warlordDestroyCount: 0 },
+      // Feature 15 reset (scores do not carry across load)
+      waveScore: 0, runScore: 0, waveStartGold: 0, goldSpentThisWave: 0, comboBonusGold: 0,
+      minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
+      layeredDefenseKilled: false, rockBottomReached: false,
+      oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
     })
   },
 
@@ -390,7 +426,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   removeTile(col, row) {
-    const { grid, gold, tileUpgrades } = get()
+    const { grid, gold, tileUpgrades, tileSwapCounts } = get()
     const tileId = grid[row]?.[col]
     if (!tileId || tileId === TILE.EMPTY || tileId === TILE.PATH ||
         tileId === TILE.ENTRANCE || tileId === TILE.TREASURE) return
@@ -402,7 +438,10 @@ export const useGameStore = create((set, get) => ({
     newGrid[row][col] = pathCenterSet.has(`${col},${row}`) ? TILE.PATH : TILE.EMPTY
     const newUpgrades = { ...tileUpgrades }
     delete newUpgrades[`${col},${row}`]
-    set({ grid: newGrid, gold: gold + refund, tileUpgrades: newUpgrades })
+    // Feature 15: track tile swap count for Budget Committee achievement
+    const swapKey = `${col},${row}`
+    const newSwaps = { ...tileSwapCounts, [swapKey]: (tileSwapCounts[swapKey] ?? 0) + 1 }
+    set({ grid: newGrid, gold: gold + refund, tileUpgrades: newUpgrades, tileSwapCounts: newSwaps })
     audio.play('tile_removed')
   },
 
@@ -630,6 +669,9 @@ export const useGameStore = create((set, get) => ({
       )
     }
 
+    // Feature 15: capture gold available at wave start for efficiency calculation
+    const waveStartGold = get().gold
+
     set({
       phase:           PHASE.WAVE,
       heroes,
@@ -665,6 +707,17 @@ export const useGameStore = create((set, get) => ({
       totalGridCost:              0,
       // Feature 14: reset combo tracking
       bestComboThisWave:          null,
+      // Feature 15: wave-level score + achievement tracking (also reset leaderboard rank)
+      leaderboardRank:             null,
+      waveStartGold,
+      goldSpentThisWave:           0,  // computed in endWave
+      comboBonusGold:              0,
+      newlyUnlockedAchievements:   [],
+      layeredDefenseKilled:        false,
+      rockBottomReached:           false,
+      oopsTriggered:               false,
+      hiredWrongMonstersTriggered: false,
+      tileSwapCounts:              {},  // reset each plan → wave transition
     })
 
     // Auto-dismiss overlay after 3.5 seconds
@@ -680,6 +733,11 @@ export const useGameStore = create((set, get) => ({
     const scoutObservedKeys = new Set()   // trap tiles the Scout has triggered
     const waveTrapTriggers  = {}          // trapKey → trigger count this wave
     let   waveWarlordDisarms = 0          // warlord trap disarms this wave
+
+    // ── Feature 15: Per-wave achievement tracking (closure-local) ─────────────
+    // "Hired the Wrong Monsters": track last-hit times for idol/bat/shadow per hero
+    const monsterHitTimes = {}   // heroId → { idol: ts, bat: ts, shadow: ts }
+    let   comboBonusGoldAcc = 0  // accumulate combo bonus gold for score
 
     // ── Per-wave event timing state (captured in closure) ─────────────────────
     let waveElapsed = 0              // total ms elapsed since wave start
@@ -922,6 +980,58 @@ export const useGameStore = create((set, get) => ({
         if (!newBestCombo || crushCombo.complexity > newBestCombo.complexity) newBestCombo = crushCombo
       }
 
+      // ── Feature 15: Per-tick achievement tracking ─────────────────────────
+      comboBonusGoldAcc += comboBonusGold
+
+      // Rock Bottom: treasure reached exactly 1 HP
+      let rockBottom = state.rockBottomReached
+      if (!rockBottom && newTreasureHp === 1) rockBottom = true
+
+      // Layered Defense: hero killed with all 4 status effects
+      let layeredDef = state.layeredDefenseKilled
+      if (!layeredDef) {
+        result.events.forEach(ev => {
+          if (ev.type === 'hero_killed' && ev.poisoned && ev.slowed && ev.curseStacks >= 1 && ev.maxHpDrained)
+            layeredDef = true
+        })
+      }
+
+      // Hired the Wrong Monsters: idol + bat + shadow hit same hero within 2 s
+      let hiredWrong = state.hiredWrongMonstersTriggered
+      if (!hiredWrong) {
+        result.events.forEach(ev => {
+          if (ev.type !== 'tower_attack') return
+          const hId = ev.heroId ?? ev.targetId
+          if (!hId) return
+          if (!monsterHitTimes[hId]) monsterHitTimes[hId] = {}
+          const hits = monsterHitTimes[hId]
+          if (ev.towerType === TILE.IDOL)   hits.idol   = ts
+          if (ev.towerType === TILE.BAT)    hits.bat    = ts
+          if (ev.towerType === TILE.SHADOW) hits.shadow = ts
+          if (hits.idol && hits.bat && hits.shadow) {
+            const maxGap = Math.max(
+              Math.abs(hits.idol - hits.bat),
+              Math.abs(hits.bat - hits.shadow),
+              Math.abs(hits.idol - hits.shadow),
+            )
+            if (maxGap <= 2000) hiredWrong = true
+          }
+        })
+      }
+
+      // Oops: thief disarmed the last spike remaining on the path
+      let oops = state.oopsTriggered
+      if (!oops) {
+        result.events.forEach(ev => {
+          if (ev.type === 'trap_disarmed' && ev.heroType === 'thief') {
+            // Check if there are any spike tiles left after disarm
+            const currentGrid = get().grid
+            const hasSpike = currentGrid.some(r => r.some(cell => cell === TILE.SPIKE))
+            if (!hasSpike) oops = true
+          }
+        })
+      }
+
       // ── Dark Lord's Demands — accumulate tracking fields ──────────────────
       let newFirstKill    = state.firstHeroKilledType
       let newTrapKills    = state.trapKillsThisWave
@@ -963,6 +1073,12 @@ export const useGameStore = create((set, get) => ({
         heroesReachedTreasureCount: newReachedTreasure,
         magesEscapedThisWave:      newMagesEscaped,
         waveElapsedMs:             waveElapsed,
+        // Feature 15
+        rockBottomReached:           rockBottom,
+        layeredDefenseKilled:        layeredDef,
+        hiredWrongMonstersTriggered: hiredWrong,
+        oopsTriggered:               oops,
+        comboBonusGold:              comboBonusGoldAcc,
       })
 
       // Handle boulder self-destruction (one-shot trap)
@@ -1056,13 +1172,76 @@ export const useGameStore = create((set, get) => ({
   },
 
   endWave() {
-    const { simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode, grid } = get()
+    const {
+      simulationRef, waveIndex, unlockedTools, difficulty, isEndlessMode, grid,
+      // Feature 15 state
+      waveStartGold, gold, goldEarnedThisWave, treasureHp, treasureMaxHp,
+      heroesEscapedWithGold, heroesKilled, darkLordDemandMet, waveElapsedMs, comboBonusGold,
+      layeredDefenseKilled, rockBottomReached, oopsTriggered, hiredWrongMonstersTriggered,
+      tileSwapCounts, runScore, minTreasureHpThisRun,
+    } = get()
     if (simulationRef) cancelAnimationFrame(simulationRef)
     audio.play('wave_cleared')
     // Clear global event + boss state between waves
     set({
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
       activeBossName: null, bossEntranceFanfareEnd: 0, bossEntranceFanfareColor: null,
+    })
+
+    // ── Feature 15: compute wave score ────────────────────────────────────────
+    const goldSpentThisWave = Math.max(0, waveStartGold - gold)
+
+    // Count distinct non-structural tile types on grid for Tower of Babel
+    const STRUCTURAL_TILES = new Set(['empty','path','entrance','treasure'])
+    const distinctTypes = new Set()
+    for (const row of grid)
+      for (const cell of row)
+        if (!STRUCTURAL_TILES.has(cell)) distinctTypes.add(cell)
+    const towerOfBabelCount = distinctTypes.size
+
+    // Check if wave has warlord and count on-path traps
+    const ON_PATH_TRAP_SET = new Set(['spike','boulder','door','lava','pit','pendulum','tar','electric','stasis'])
+    const waveConf = WAVE_CONFIGS[waveIndex]
+    const hasWarlordThisWave = waveConf?.heroes?.includes('warlord') ?? false
+    let onPathTrapCount = 0
+    for (const row of grid)
+      for (const cell of row)
+        if (ON_PATH_TRAP_SET.has(cell)) onPathTrapCount++
+
+    const tileSwapMax = Math.max(0, ...Object.values(tileSwapCounts))
+
+    const waveScore = calcWaveScore({
+      goldEarnedThisWave,
+      treasureHp,
+      waveStartGold,
+      goldSpentThisWave,
+      darkLordDemandMet,
+      waveElapsedMs,
+      comboBonusGold,
+    })
+    const newRunScore = runScore + waveScore
+    const newMinHp = minTreasureHpThisRun === null
+      ? treasureHp
+      : Math.min(minTreasureHpThisRun, treasureHp)
+
+    // Check wave achievements
+    const achievementState = {
+      waveIndex, difficulty, treasureHp, treasureMaxHp,
+      heroesEscapedWithGold, heroesKilledThisWave: heroesKilled,
+      goldEarnedThisWave, waveStartGold, goldSpentThisWave,
+      layeredDefenseKilled, hasWarlordThisWave, onPathTrapCount,
+      towerOfBabelCount, rockBottomReached, tileSwapMax,
+      oopsTriggered, hiredWrongMonstersTriggered,
+    }
+    const candidateIds = checkWaveAchievements(achievementState)
+    const newlyUnlocked = candidateIds.filter(id => unlockAchievement(id))
+
+    set({
+      waveScore,
+      runScore:              newRunScore,
+      goldSpentThisWave,
+      minTreasureHpThisRun:  newMinHp,
+      newlyUnlockedAchievements: newlyUnlocked,
     })
 
     const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.medium
@@ -1143,6 +1322,11 @@ export const useGameStore = create((set, get) => ({
     if (isEndlessMode) {
       const endlessWavesAdded = nextWaveIndex - WAVE_CONFIGS.length + 1
       recordEndlessHigh(endlessWavesAdded)
+      // Feature 15: check Dungeon Eternal achievement (wave 25 = 11 endless waves)
+      if (endlessWavesAdded >= 11 && unlockAchievement('dungeon_eternal')) {
+        const fresh = get()
+        set({ newlyUnlockedAchievements: [...(fresh.newlyUnlockedAchievements ?? []), 'dungeon_eternal'] })
+      }
       set({ phase: PHASE.PLAN, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [],
             endlessWave: endlessWavesAdded })
       writeSave(SAVE_SLOTS.auto, get())
@@ -1166,6 +1350,31 @@ export const useGameStore = create((set, get) => ({
           recordCampaignNode(campaignNodeId, stars)
         }
       }
+
+      // Feature 15: check run-end achievements + record leaderboard
+      const runAchievements = checkRunAchievements({
+        difficulty: fresh.difficulty,
+        minTreasureHpThisRun: fresh.minTreasureHpThisRun,
+        endlessWave: fresh.endlessWave,
+      })
+      const runNewlyUnlocked = runAchievements.filter(id => unlockAchievement(id))
+
+      const lbEntry = {
+        score:  fresh.runScore,
+        kills:  fresh.runKills,
+        waves:  nextWaveIndex,
+        date:   Date.now(),
+      }
+      const lbRank = recordLeaderboardEntry(fresh.difficulty, lbEntry)
+
+      set({
+        newlyUnlockedAchievements: [
+          ...(fresh.newlyUnlockedAchievements ?? []),
+          ...runNewlyUnlocked,
+        ],
+        leaderboardRank: lbRank,
+      })
+
       set({ phase: PHASE.VICTORY, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [] })
     } else {
       set({ phase: PHASE.PLAN, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [] })

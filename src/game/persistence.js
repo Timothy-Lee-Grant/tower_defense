@@ -173,6 +173,59 @@ export function recordEndlessHigh(wavesReached) {
     try { localStorage.setItem(ENDLESS_KEY, String(wavesReached)) } catch {}
 }
 
+// ── Feature 15: Achievements ──────────────────────────────────────────────────
+const ACHIEVEMENTS_KEY = 'da_achievements'
+
+// Returns a Set of unlocked achievement IDs.
+export function readAchievements() {
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENTS_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch { return new Set() }
+}
+
+// Attempt to unlock an achievement.
+// Returns true if it was newly unlocked (was not already in the set), false if already had it.
+export function unlockAchievement(id) {
+  const set = readAchievements()
+  if (set.has(id)) return false
+  set.add(id)
+  try { localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify([...set])) } catch {}
+  return true
+}
+
+// ── Feature 15: Leaderboard ───────────────────────────────────────────────────
+const LEADERBOARD_KEY = 'da_leaderboard'
+
+// Structure: { easy: Entry[], medium: Entry[], hard: Entry[] }
+// Entry: { score, kills, waves, date }
+// At most 5 entries per difficulty, sorted descending by score.
+
+function emptyLeaderboard() {
+  return { easy: [], medium: [], hard: [] }
+}
+
+export function readLeaderboard() {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_KEY)
+    return raw ? { ...emptyLeaderboard(), ...JSON.parse(raw) } : emptyLeaderboard()
+  } catch { return emptyLeaderboard() }
+}
+
+// Add an entry. Returns the rank (1-based) the entry achieved, or null if it didn't make top 5.
+export function recordLeaderboardEntry(difficulty, entry) {
+  const lb = readLeaderboard()
+  const list = lb[difficulty] ?? []
+  list.push(entry)
+  list.sort((a, b) => b.score - a.score)
+  lb[difficulty] = list.slice(0, 5)
+  try { localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(lb)) } catch {}
+  const rank = lb[difficulty].findIndex(e =>
+    e.score === entry.score && e.date === entry.date
+  )
+  return rank >= 0 ? rank + 1 : null
+}
+
 // ── Layout export / import (6.4 — grid snapshot sharing) ─────────────────────
 // Encodes only the non-structural tiles so the code stays short.
 // Format: base64 of "col,row:tileId|col,row:tileId|..."

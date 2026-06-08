@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { selectResultsComment } from '../game/gerald.js'
 import { WAVE_CONFIGS } from '../game/constants.js'
+import { getAchievement } from '../game/scoring.js'
 
 export default function ResultsScreen() {
   const waveIndex             = useGameStore(s => s.waveIndex)
@@ -13,8 +14,10 @@ export default function ResultsScreen() {
   const treasureMaxHp         = useGameStore(s => s.treasureMaxHp)   // difficulty-adjusted ceiling
   const upgradeCards          = useGameStore(s => s.upgradeCards)
   const pickUpgradeCard       = useGameStore(s => s.pickUpgradeCard)
-  const darkLordDemandMet     = useGameStore(s => s.darkLordDemandMet)
-  const bestComboThisWave     = useGameStore(s => s.bestComboThisWave)
+  const darkLordDemandMet         = useGameStore(s => s.darkLordDemandMet)
+  const bestComboThisWave         = useGameStore(s => s.bestComboThisWave)
+  const waveScore                 = useGameStore(s => s.waveScore)
+  const newlyUnlockedAchievements = useGameStore(s => s.newlyUnlockedAchievements)
 
   // Dark Lord's demand for the wave that just completed
   const demand = WAVE_CONFIGS[waveIndex]?.darkLordDemand ?? null
@@ -77,6 +80,14 @@ export default function ResultsScreen() {
           />
         </div>
 
+        {/* Feature 15.1: Wave score */}
+        {waveScore > 0 && (
+          <div style={s.scoreRow}>
+            <span style={s.scoreLabel}>⭐ Wave Score</span>
+            <span style={s.scoreValue}>{waveScore.toLocaleString()}</span>
+          </div>
+        )}
+
         {/* Feature 14.3: Best combo of the wave */}
         {bestComboThisWave && (
           <div style={s.bestCombo}>
@@ -131,6 +142,26 @@ export default function ResultsScreen() {
                 Reward unlocked: +{demand.reward.amount}g bonus upgrade option below
               </p>
             )}
+          </div>
+        )}
+
+        {/* Feature 15.2: Achievement unlocks */}
+        {newlyUnlockedAchievements.length > 0 && (
+          <div style={s.achieveSection}>
+            <div style={s.achieveHeader}>🎖 Achievement Unlocked</div>
+            {newlyUnlockedAchievements.map(id => {
+              const a = getAchievement(id)
+              if (!a) return null
+              return (
+                <div key={id} style={s.achieveCard}>
+                  <span style={s.achieveEmoji}>{a.emoji}</span>
+                  <div style={s.achieveText}>
+                    <div style={s.achieveName}>{a.name}</div>
+                    <div style={s.achieveDesc}>{a.desc}</div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -305,6 +336,46 @@ const s = {
   demandReward: {
     fontFamily: "'Cinzel', serif",
     fontSize: '0.58rem', color: '#a0d0a0', letterSpacing: '0.05em', margin: 0,
+  },
+
+  // Feature 15.1: Wave score row
+  scoreRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    background: 'rgba(232,196,74,0.06)', border: '1px solid rgba(232,196,74,0.15)',
+    borderRadius: 8, padding: '0.55rem 1.1rem',
+  },
+  scoreLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', letterSpacing: '0.1em',
+    color: 'var(--gold-dim)', textTransform: 'uppercase',
+  },
+  scoreValue: {
+    fontFamily: "'Cinzel', serif", fontSize: '1.1rem', fontWeight: 700,
+    color: 'var(--gold-bright)',
+  },
+  // Feature 15.2: Achievement unlock section
+  achieveSection: {
+    background: 'rgba(255,210,60,0.05)', border: '1px solid rgba(255,210,60,0.2)',
+    borderRadius: 8, padding: '0.8rem 1rem',
+    display: 'flex', flexDirection: 'column', gap: '0.5rem',
+  },
+  achieveHeader: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', letterSpacing: '0.12em',
+    color: 'rgba(255,220,80,0.8)', textTransform: 'uppercase', marginBottom: '0.1rem',
+  },
+  achieveCard: {
+    display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+    background: 'rgba(255,200,50,0.07)', border: '1px solid rgba(255,200,50,0.18)',
+    borderRadius: 6, padding: '0.55rem 0.75rem',
+  },
+  achieveEmoji: { fontSize: '1.3rem', flexShrink: 0, lineHeight: 1 },
+  achieveText: { display: 'flex', flexDirection: 'column', gap: '0.1rem' },
+  achieveName: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.72rem', fontWeight: 700,
+    color: 'var(--gold-bright)', letterSpacing: '0.04em',
+  },
+  achieveDesc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4,
   },
 
   // 4th card (demand reward)
