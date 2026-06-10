@@ -100,12 +100,12 @@ const s = {
     color: 'var(--gold-dim)', letterSpacing: '0.5em', fontSize: '0.75rem',
   },
   title: {
-    fontFamily: "'Cinzel', serif", fontSize: '1.6rem',
+    fontFamily: 'var(--font-serif)', fontSize: '1.6rem',
     fontWeight: 700, color: 'var(--gold-bright)',
     margin: '0.15rem 0',
   },
   subtitle: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     color: 'var(--text-secondary)', fontSize: '0.95rem', margin: 0,
   },
   actions: {
@@ -119,7 +119,7 @@ const s = {
     borderRadius: 6,
     padding: '0.65rem 1.2rem',
     fontSize: '0.9rem',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontWeight: 700,
     cursor: 'pointer',
     letterSpacing: '0.03em',
@@ -137,7 +137,7 @@ const s = {
     borderRadius: 4,
     padding: '0.25rem 0.6rem',
     fontSize: '0.72rem',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     color: 'var(--gold-dim)',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
@@ -153,7 +153,7 @@ const s = {
     display: 'flex', flexDirection: 'column', gap: '0.35rem',
   },
   controlsHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.55rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.55rem',
     letterSpacing: '0.12em', color: 'var(--text-muted)',
     textTransform: 'uppercase', marginBottom: '0.2rem',
   },
@@ -161,12 +161,12 @@ const s = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem',
   },
   controlKey: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem',
     color: 'var(--gold-dim)', letterSpacing: '0.03em', whiteSpace: 'nowrap',
     flexShrink: 0,
   },
   controlVal: {
-    fontFamily: "'Crimson Text', serif", fontSize: '0.75rem',
+    fontFamily: 'var(--font-italic)', fontSize: '0.75rem',
     color: 'var(--text-secondary)', textAlign: 'right',
   },
   btnDanger: {
@@ -176,7 +176,7 @@ const s = {
     borderRadius: 6,
     padding: '0.5rem 1rem',
     fontSize: '0.75rem',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     cursor: 'pointer',
     letterSpacing: '0.03em',
   },

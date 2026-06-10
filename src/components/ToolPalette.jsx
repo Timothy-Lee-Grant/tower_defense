@@ -33,7 +33,7 @@ const CATEGORY_LABELS = {
   [TOOL_CATEGORY.STRUCTURES]: '🧱 Structures',
 }
 
-export default function ToolPalette() {
+function ToolPalette() {
   const phase          = useGameStore(s => s.phase)
   const selectedTool   = useGameStore(s => s.selectedTool)
   const selectedCat    = useGameStore(s => s.selectedCategory)
@@ -127,7 +127,7 @@ export default function ToolPalette() {
                 <span style={{
                   ...styles.toolCost,
                   color: !canAfford
-                    ? '#8b1a1a'
+                    ? 'var(--color-hard)'
                     : isWave
                       ? '#e8a030'
                       : 'var(--gold-bright)',
@@ -280,15 +280,15 @@ const tt = {
   emoji: { fontSize: '1.2rem', flexShrink: 0 },
   name: {
     flex: 1,
-    fontFamily: "'Cinzel', serif", fontSize: '0.78rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.78rem',
     color: 'var(--gold-bright)', fontWeight: 700,
   },
   cost: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.7rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.7rem',
     color: 'var(--gold-dim)', fontWeight: 700,
   },
   desc: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.78rem', color: 'var(--text-secondary)',
     lineHeight: 1.45, margin: '0 0 0.5rem',
   },
@@ -300,24 +300,24 @@ const tt = {
     marginBottom: '0.5rem',
   },
   statRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  statLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.55rem', color: 'var(--text-muted)', letterSpacing: '0.06em' },
-  statVal:   { fontFamily: "'Cinzel', serif", fontSize: '0.65rem', color: 'var(--bone)', fontWeight: 600 },
+  statLabel: { fontFamily: 'var(--font-serif)', fontSize: '0.55rem', color: 'var(--text-muted)', letterSpacing: '0.06em' },
+  statVal:   { fontFamily: 'var(--font-serif)', fontSize: '0.65rem', color: 'var(--bone)', fontWeight: 600 },
   section: { marginBottom: '0.4rem' },
   sectionLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.5rem',
     color: 'var(--text-muted)', letterSpacing: '0.1em',
     textTransform: 'uppercase', marginBottom: '0.25rem',
   },
   chips: { display: 'flex', flexWrap: 'wrap', gap: '0.25rem' },
   chip: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.52rem',
     color: 'rgba(60,255,180,0.85)',
     background: 'rgba(40,220,160,0.08)',
     border: '1px solid rgba(40,220,160,0.2)',
     borderRadius: 3, padding: '1px 6px',
   },
   noteRow: {
-    fontFamily: "'Crimson Text', serif", fontSize: '0.72rem', lineHeight: 1.4, marginTop: '0.15rem',
+    fontFamily: 'var(--font-italic)', fontSize: '0.72rem', lineHeight: 1.4, marginTop: '0.15rem',
   },
 }
 
@@ -340,7 +340,7 @@ const dpsStyle = {
   marginTop: '0.3rem', paddingLeft: '1.6rem',
 }
 const dpsChip = {
-  fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+  fontFamily: 'var(--font-serif)', fontSize: '0.52rem',
   color: 'var(--gold-dim)', background: 'rgba(232,196,74,0.08)',
   border: '1px solid rgba(232,196,74,0.15)',
   borderRadius: 3, padding: '1px 5px', letterSpacing: '0.04em',
@@ -374,14 +374,14 @@ const styles = {
     minWidth: 0,
   },
   warChestLabel: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.52rem',
     letterSpacing: '0.12em',
     color: '#e8a030',
     textTransform: 'uppercase',
   },
   warChestBalance: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.78rem',
     fontWeight: 700,
     color: '#f0c060',
@@ -395,7 +395,7 @@ const styles = {
     padding: '0.6rem 0.25rem',
     background: 'transparent',
     color: 'var(--text-secondary)',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.6rem',
     letterSpacing: '0.05em',
     border: 'none',
@@ -447,13 +447,13 @@ const styles = {
   },
   toolName: {
     flex: 1,
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.7rem',
     color: 'var(--bone)',
     letterSpacing: '0.03em',
   },
   toolCost: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.75rem',
     fontWeight: 700,
     flexShrink: 0,
@@ -464,7 +464,7 @@ const styles = {
   toolDesc: {
     marginTop: '0.1rem',
     fontSize: '0.75rem',
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontStyle: 'italic',
     color: 'var(--text-secondary)',
     lineHeight: 1.4,
@@ -477,12 +477,12 @@ const styles = {
     transform: 'translateY(-50%)',
     fontSize: '0.65rem',
     color: 'var(--text-muted)',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
   },
   hint: {
     padding: '0.6rem 0.75rem',
     fontSize: '0.7rem',
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontStyle: 'italic',
     color: 'var(--text-muted)',
     borderTop: '1px solid rgba(255,255,255,0.05)',
@@ -490,3 +490,5 @@ const styles = {
     minHeight: 36,
   },
 }
+
+export default React.memo(ToolPalette)

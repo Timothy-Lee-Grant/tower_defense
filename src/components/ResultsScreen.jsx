@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore.js'
 import { selectResultsComment } from '../game/gerald.js'
 import { WAVE_CONFIGS, DUNGEON_TOOLS, SYNERGY_PAIRS } from '../game/constants.js'
 import { getAchievement } from '../game/scoring.js'
+import { StatCard, GeraldMemo } from './shared/index.jsx'
 
 export default function ResultsScreen() {
   const waveIndex             = useGameStore(s => s.waveIndex)
@@ -67,7 +68,7 @@ export default function ResultsScreen() {
           <StatCard
             value={heroesEscapedWithGold}
             label="Escaped With Gold"
-            color={heroesEscapedWithGold > 0 ? '#8b1a1a' : 'var(--gold-bright)'}
+            color={heroesEscapedWithGold > 0 ? 'var(--color-hard)' : 'var(--gold-bright)'}
           />
           <StatCard
             value={`+${goldEarnedThisWave}g`}
@@ -77,7 +78,7 @@ export default function ResultsScreen() {
           <StatCard
             value={Math.ceil(treasureHp)}
             label="Treasure HP"
-            color={hpRatio > 0.6 ? 'var(--gold-bright)' : hpRatio > 0.3 ? '#c4430a' : '#8b1a1a'}
+            color={hpRatio > 0.6 ? 'var(--gold-bright)' : hpRatio > 0.3 ? 'var(--color-fire)' : 'var(--color-hard)'}
           />
         </div>
 
@@ -113,10 +114,9 @@ export default function ResultsScreen() {
         )}
 
         {/* Gerald memo */}
-        <div style={s.memo}>
-          <span style={s.memoFrom}>Memo from Gerald, Dungeon Operations</span>
-          <p style={s.memoText}>{geraldMemo}</p>
-        </div>
+        <GeraldMemo from="Memo from Gerald, Dungeon Operations">
+          {geraldMemo}
+        </GeraldMemo>
 
         {/* Dark Lord's Demand result */}
         {demand && darkLordDemandMet !== null && (
@@ -312,15 +312,6 @@ function CPStatRow({ label, val, gold }) {
   )
 }
 
-function StatCard({ value, label, color }) {
-  return (
-    <div style={s.statCard}>
-      <div style={{ ...s.statValue, color: color ?? 'var(--bone)' }}>{value}</div>
-      <div style={s.statLabel}>{label}</div>
-    </div>
-  )
-}
-
 const s = {
   root: {
     width: '100%', height: '100%',
@@ -332,21 +323,11 @@ const s = {
   header: { textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' },
   ornament: { color: 'var(--gold-dim)', letterSpacing: '0.5em', fontSize: '0.8rem' },
   title: {
-    fontFamily: "'Cinzel', serif", fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
+    fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
     fontWeight: 700, color: 'var(--gold-bright)', margin: '0.25rem 0',
   },
-  subtitle: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '1rem' },
+  subtitle: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '1rem' },
   statsRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.75rem' },
-  statCard: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(232,196,74,0.12)',
-    borderRadius: 8, padding: '1rem', textAlign: 'center',
-  },
-  statValue: { fontFamily: "'Cinzel', serif", fontSize: '1.7rem', fontWeight: 700, color: 'var(--bone)', lineHeight: 1 },
-  statLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
-    letterSpacing: '0.1em', color: 'var(--text-muted)', marginTop: '0.3rem', textTransform: 'uppercase',
-  },
   // Feature 14.3: Best combo card
   bestCombo: {
     background: 'rgba(40,220,160,0.05)',
@@ -355,16 +336,16 @@ const s = {
     display: 'flex', flexDirection: 'column', gap: '0.15rem',
   },
   bestComboHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.56rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.56rem',
     letterSpacing: '0.1em', color: 'rgba(60,255,180,0.7)',
     textTransform: 'uppercase',
   },
   bestComboLabel: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.95rem', color: 'var(--bone)', margin: 0, lineHeight: 1.4,
   },
   bestComboHero: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem',
     color: 'rgba(60,255,180,0.55)', letterSpacing: '0.06em', margin: 0,
   },
 
@@ -373,23 +354,13 @@ const s = {
     background: 'rgba(139,26,26,0.08)', border: '1px solid rgba(139,26,26,0.2)',
     borderRadius: 8, padding: '0.6rem 1rem',
   },
-  stolenLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.6rem', color: '#8b1a1a', letterSpacing: '0.08em', whiteSpace: 'nowrap' },
+  stolenLabel: { fontFamily: 'var(--font-serif)', fontSize: '0.6rem', color: 'var(--color-hard)', letterSpacing: '0.08em', whiteSpace: 'nowrap' },
   stolenBar: { flex: 1, height: 6, background: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' },
-  stolenFill: { height: '100%', background: '#8b1a1a', borderRadius: 3 },
-  stolenAmount: { fontFamily: "'Cinzel', serif", fontSize: '0.65rem', color: '#8b1a1a', whiteSpace: 'nowrap' },
-  memo: {
-    background: 'rgba(232,196,74,0.04)',
-    border: '1px solid rgba(232,196,74,0.12)',
-    borderRadius: 8, padding: '1rem 1.25rem',
-  },
-  memoFrom: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.58rem', letterSpacing: '0.1em',
-    color: 'var(--gold-dim)', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase',
-  },
-  memoText: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', color: 'var(--bone)', fontSize: '1rem', lineHeight: 1.6 },
+  stolenFill: { height: '100%', background: 'var(--color-hard)', borderRadius: 3 },
+  stolenAmount: { fontFamily: 'var(--font-serif)', fontSize: '0.65rem', color: 'var(--color-hard)', whiteSpace: 'nowrap' },
   upgradeSection: { display: 'flex', flexDirection: 'column', gap: '0.7rem' },
-  upgradeHeader: { fontFamily: "'Cinzel', serif", fontSize: '0.9rem', color: 'var(--gold-bright)', letterSpacing: '0.1em', textAlign: 'center' },
-  upgradeSubtitle: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem' },
+  upgradeHeader: { fontFamily: 'var(--font-serif)', fontSize: '0.9rem', color: 'var(--gold-bright)', letterSpacing: '0.1em', textAlign: 'center' },
+  upgradeSubtitle: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem' },
   cards: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem' },
   card: {
     background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(232,196,74,0.15)',
@@ -398,12 +369,12 @@ const s = {
     color: 'var(--text-primary)',
   },
   cardEmoji: { fontSize: '2rem', marginBottom: '0.2rem' },
-  cardName: { fontFamily: "'Cinzel', serif", fontSize: '0.78rem', color: 'var(--gold-bright)', fontWeight: 600 },
-  cardMeta: { fontFamily: "'Cinzel', serif", fontSize: '0.52rem', color: 'var(--text-muted)', letterSpacing: '0.08em' },
-  cardDesc: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, flex: 1 },
-  cardPickBtn: { marginTop: '0.4rem', fontFamily: "'Cinzel', serif", fontSize: '0.62rem', color: 'var(--gold-dim)', letterSpacing: '0.05em' },
+  cardName: { fontFamily: 'var(--font-serif)', fontSize: '0.78rem', color: 'var(--gold-bright)', fontWeight: 600 },
+  cardMeta: { fontFamily: 'var(--font-serif)', fontSize: '0.52rem', color: 'var(--text-muted)', letterSpacing: '0.08em' },
+  cardDesc: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, flex: 1 },
+  cardPickBtn: { marginTop: '0.4rem', fontFamily: 'var(--font-serif)', fontSize: '0.62rem', color: 'var(--gold-dim)', letterSpacing: '0.05em' },
   nextWaveMsg: { textAlign: 'center', padding: '2rem' },
-  nextWaveText: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '1.1rem', color: 'var(--text-secondary)' },
+  nextWaveText: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', fontSize: '1.1rem', color: 'var(--text-secondary)' },
 
   // Dark Lord's Demand
   demandResult: {
@@ -417,20 +388,20 @@ const s = {
   },
   demandIcon: { fontSize: '0.9rem', flexShrink: 0 },
   demandLabel: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.58rem', letterSpacing: '0.12em',
     color: 'var(--text-muted)', textTransform: 'uppercase', flex: 1,
   },
   demandStatus: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.62rem', letterSpacing: '0.08em', fontWeight: 700,
   },
   demandText: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.88rem', color: 'var(--bone)', lineHeight: 1.5, margin: 0,
   },
   demandReward: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.58rem', color: '#a0d0a0', letterSpacing: '0.05em', margin: 0,
   },
 
@@ -441,11 +412,11 @@ const s = {
     borderRadius: 8, padding: '0.55rem 1.1rem',
   },
   scoreLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', letterSpacing: '0.1em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.62rem', letterSpacing: '0.1em',
     color: 'var(--gold-dim)', textTransform: 'uppercase',
   },
   scoreValue: {
-    fontFamily: "'Cinzel', serif", fontSize: '1.1rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700,
     color: 'var(--gold-bright)',
   },
   // Feature 15.2: Achievement unlock section
@@ -455,7 +426,7 @@ const s = {
     display: 'flex', flexDirection: 'column', gap: '0.5rem',
   },
   achieveHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', letterSpacing: '0.12em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.62rem', letterSpacing: '0.12em',
     color: 'rgba(255,220,80,0.8)', textTransform: 'uppercase', marginBottom: '0.1rem',
   },
   achieveCard: {
@@ -466,11 +437,11 @@ const s = {
   achieveEmoji: { fontSize: '1.3rem', flexShrink: 0, lineHeight: 1 },
   achieveText: { display: 'flex', flexDirection: 'column', gap: '0.1rem' },
   achieveName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.72rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.72rem', fontWeight: 700,
     color: 'var(--gold-bright)', letterSpacing: '0.04em',
   },
   achieveDesc: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4,
   },
 
@@ -495,16 +466,16 @@ const s = {
     display: 'flex', alignItems: 'center', gap: '0.6rem',
   },
   cardPreviewName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.82rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.82rem',
     color: 'var(--gold-bright)', fontWeight: 700,
   },
   cardPreviewMeta: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.5rem',
     color: 'var(--text-muted)', letterSpacing: '0.06em',
     marginTop: '0.1rem',
   },
   cardPreviewDesc: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.78rem', color: 'var(--text-secondary)',
     lineHeight: 1.4, margin: 0,
   },
@@ -518,16 +489,16 @@ const s = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
   cardPreviewRowLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.52rem',
     color: 'var(--text-muted)', letterSpacing: '0.06em',
     textTransform: 'uppercase',
   },
   cardPreviewRowVal: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem',
     color: 'var(--bone)', fontWeight: 600,
   },
   cardPreviewChip: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.5rem',
     color: 'rgba(60,255,180,0.85)',
     background: 'rgba(40,220,160,0.07)',
     border: '1px solid rgba(40,220,160,0.2)',
@@ -540,7 +511,7 @@ const s = {
     background: 'rgba(20,60,20,0.3)',
   },
   cardDemandBadge: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.5rem', letterSpacing: '0.08em',
     color: '#80c080', textTransform: 'uppercase',
     marginBottom: '0.1rem',

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useMemo } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
 import { selectWaveComment } from '../game/gerald.js'
+import { PillBadge } from './shared/index.jsx'
 
-export default function BattleLog() {
+function BattleLog() {
   const phase      = useGameStore(s => s.phase)
   const battleLog  = useGameStore(s => s.battleLog)
   const heroes     = useGameStore(s => s.heroes)
@@ -53,10 +54,10 @@ export default function BattleLog() {
     <div style={s.root}>
       {/* Status counters */}
       <div style={s.statusRow}>
-        <Pill icon="⚔" count={inbound.length}      label="inbound" />
-        <Pill icon="💰" count={carryingGold.length} label="fleeing" color="#c9a02a" />
-        <Pill icon="☠"  count={dead.length}         label="slain"   color="#3d7a1a" />
-        <Pill icon="🏃" count={escaped.length}      label="escaped" color="#8b1a1a" />
+        <PillBadge icon="⚔" count={inbound.length}      label="inbound" />
+        <PillBadge icon="💰" count={carryingGold.length} label="fleeing" color="#c9a02a" />
+        <PillBadge icon="☠"  count={dead.length}         label="slain"   color="var(--color-poison)" />
+        <PillBadge icon="🏃" count={escaped.length}      label="escaped" color="var(--color-hard)" />
       </div>
 
       {/* Hero list */}
@@ -114,7 +115,7 @@ export default function BattleLog() {
                       {hero.hasGold && !isDead && <span style={s.badgeGold}>💰</span>}
                       <span style={{
                         ...s.heroSubtext,
-                        color: isDead ? '#8b1a1a' : isEscaped ? '#c9a02a' : 'var(--text-muted)',
+                        color: isDead ? 'var(--color-hard)' : isEscaped ? '#c9a02a' : 'var(--text-muted)',
                       }}>
                         {isDead    ? '☠ Slain'
                           : isEscaped ? (hero.hasGold ? '🏃 Escaped!' : '💨 Fled')
@@ -130,8 +131,8 @@ export default function BattleLog() {
                           ...s.hpFill,
                           width: `${(ratio * 100).toFixed(1)}%`,
                           background: hero.hasGold
-                            ? (ratio > 0.5 ? '#c9a02a' : '#8b1a1a')
-                            : (ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'),
+                            ? (ratio > 0.5 ? '#c9a02a' : 'var(--color-hard)')
+                            : (ratio > 0.6 ? 'var(--color-poison)' : ratio > 0.3 ? '#c9a02a' : 'var(--color-hard)'),
                         }} />
                       </div>
                       {(distLabel || effectiveSlowLabel) && (
@@ -173,16 +174,6 @@ export default function BattleLog() {
   )
 }
 
-function Pill({ icon, count, label, color }) {
-  return (
-    <div style={s.statusPill}>
-      <span style={{ color: color ?? 'var(--bone)' }}>{icon}</span>
-      <span style={s.statusCount}>{count}</span>
-      <span style={s.statusLabel}>{label}</span>
-    </div>
-  )
-}
-
 const s = {
   root: {
     display: 'flex', flexDirection: 'column', height: '100%',
@@ -194,19 +185,6 @@ const s = {
     display: 'flex', gap: '0.2rem', padding: '0.5rem',
     borderBottom: '1px solid rgba(255,255,255,0.05)',
   },
-  statusPill: {
-    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: '0.08rem', padding: '0.3rem',
-    background: 'rgba(255,255,255,0.03)', borderRadius: 4,
-  },
-  statusCount: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.95rem',
-    fontWeight: 700, color: 'var(--bone)',
-  },
-  statusLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
-    color: 'var(--text-muted)', letterSpacing: '0.1em',
-  },
   heroList: {
     display: 'flex', flexDirection: 'column', gap: '0.3rem',
     padding: '0.5rem',
@@ -217,22 +195,22 @@ const s = {
     display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'opacity 0.3s',
   },
   heroName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.62rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.62rem',
     color: 'var(--bone)', letterSpacing: '0.04em',
   },
   heroSubtext: {
-    fontSize: '0.68rem', fontFamily: "'Crimson Text', serif", color: 'var(--text-muted)',
+    fontSize: '0.68rem', fontFamily: 'var(--font-italic)', color: 'var(--text-muted)',
   },
   badgeGold:   { fontSize: '0.65rem', color: '#c9a02a' },
   badgeBlue:   { fontSize: '0.65rem', color: '#5a9abf' },
-  badgeGreen:  { fontSize: '0.65rem', color: '#3d7a1a' },
+  badgeGreen:  { fontSize: '0.65rem', color: 'var(--color-poison)' },
   badgePurple: { fontSize: '0.65rem', color: '#a040e0' },
   badgeDrain:  { fontSize: '0.65rem', color: '#8040a0' },
   heroMeta: {
     display: 'flex', gap: '0.3rem', marginTop: '2px',
   },
   heroMetaChip: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.48rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.48rem',
     color: 'var(--text-muted)', letterSpacing: '0.04em',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(255,255,255,0.07)',
@@ -247,7 +225,7 @@ const s = {
   },
   logHeader: { padding: '0.4rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' },
   logHeaderText: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.58rem',
     color: 'var(--text-muted)', letterSpacing: '0.12em',
   },
   log: {
@@ -255,12 +233,12 @@ const s = {
     display: 'flex', flexDirection: 'column', gap: '0.25rem',
   },
   logEntry: {
-    fontFamily: "'Crimson Text', serif", fontSize: '0.78rem',
+    fontFamily: 'var(--font-italic)', fontSize: '0.78rem',
     color: 'var(--text-secondary)', lineHeight: 1.4,
     borderLeft: '2px solid rgba(232,196,74,0.15)', paddingLeft: '0.45rem',
   },
   emptyLog: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0.5rem',
   },
   geraldBox: {
@@ -269,12 +247,14 @@ const s = {
     background: 'rgba(232,196,74,0.04)',
   },
   geraldName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.58rem',
     color: 'var(--gold-dim)', letterSpacing: '0.1em',
     display: 'block', marginBottom: '0.18rem',
   },
   geraldText: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.4,
   },
 }
+
+export default React.memo(BattleLog)

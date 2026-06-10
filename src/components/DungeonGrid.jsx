@@ -4,6 +4,7 @@ import { TILE, TILE_SIZE, GRID_COLS, GRID_ROWS, DUNGEON_TOOLS, WAVE_CONFIGS, SYN
 import { HERO_SPRITES, TILE_SPRITES, ATTACK_DURATIONS, drawAttackEffect, wraithRushPos } from '../game/sprites.js'
 import { ParticleSystem, PARTICLE_EFFECTS } from '../rendering/particles.js'
 import { computeCoverageMap, HERO_PATH_COLORS } from '../game/analysis.js'
+import { previewPaths } from '../game/pathfinding.js'
 
 // ── Tile base colors ────────────────────────────────────────────────────────
 const TILE_COLORS = {
@@ -132,18 +133,34 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
   // ── Overlay state refs ────────────────────────────────────────────────────
   const coverageMapRef     = useRef(null)   // 2D array of coverage counts, or null
   const pathHeroTypesRef   = useRef([])     // hero type IDs for next wave
+  const pathPreviewsRef    = useRef({})     // { heroTypeId: [{col,row},...] } A*-computed routes
 
   // Recompute coverage map when grid changes or overlay toggled
   useEffect(() => {
     coverageMapRef.current = showCoverageMap ? computeCoverageMap(grid, layoutDataRef.current.pathTiles) : null
   }, [grid, showCoverageMap])
 
-  // Recompute hero types for path preview when wave index or overlay changes
+  // Recompute per-hero A* paths for path preview when grid, wave, or overlay changes
   useEffect(() => {
-    if (!showPathPreview) { pathHeroTypesRef.current = []; return }
+    if (!showPathPreview) {
+      pathHeroTypesRef.current = []
+      pathPreviewsRef.current  = {}
+      return
+    }
     const wave = WAVE_CONFIGS[waveIndex]
-    pathHeroTypesRef.current = wave ? [...new Set(wave.heroes)] : []
-  }, [waveIndex, showPathPreview])
+    const heroTypes = wave ? [...new Set(wave.heroes)] : []
+    pathHeroTypesRef.current = heroTypes
+    if (heroTypes.length === 0) { pathPreviewsRef.current = {}; return }
+    const { entrance, treasure } = layoutDataRef.current
+    // Run A* for each unique hero type in this wave — falls back to fixed path if A* returns []
+    const computed = previewPaths(grid, entrance, treasure, heroTypes)
+    // Fill fallback: any empty path gets the fixed pathTiles
+    const fallback = layoutDataRef.current.pathTiles
+    heroTypes.forEach(id => {
+      if (!computed[id] || computed[id].length === 0) computed[id] = fallback
+    })
+    pathPreviewsRef.current = computed
+  }, [waveIndex, showPathPreview, grid])
 
   const selectedToolDef = selectedTool
     ? DUNGEON_TOOLS.find(t => t.id === selectedTool)
@@ -496,12 +513,16 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
       ctx.restore()
     }
 
-    // ── 2d. Path preview overlay ──────────────────────────────────────────────
+    // ── 2d. Path preview overlay (A*-computed per-hero routes) ───────────────
     const previewTypes = pathHeroTypesRef.current
+    const pathPreviews = pathPreviewsRef.current
     if (previewTypes.length > 0) {
       const heroCount = previewTypes.length
       previewTypes.forEach((heroTypeId, idx) => {
         const color  = HERO_PATH_COLORS[heroTypeId] ?? '#ffffff'
+        // Each hero type follows its own A*-computed route
+        const routeTiles = pathPreviews[heroTypeId] ?? layoutDataRef.current.pathTiles
+        if (!routeTiles || routeTiles.length === 0) return
         // Spread lines ±offset perpendicular to the path direction
         const offset = (idx - (heroCount - 1) / 2) * 2.8
 
@@ -516,16 +537,16 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
         ctx.beginPath()
 
         let started = false
-        for (let i = 0; i < layoutDataRef.current.pathTiles.length; i++) {
-          const tile     = layoutDataRef.current.pathTiles[i]
+        for (let i = 0; i < routeTiles.length; i++) {
+          const tile = routeTiles[i]
           // Compute perpendicular offset from averaged direction between neighbors
-          const prev     = layoutDataRef.current.pathTiles[Math.max(0, i - 1)]
-          const next     = layoutDataRef.current.pathTiles[Math.min(layoutDataRef.current.pathTiles.length - 1, i + 1)]
-          const dx       = next.col - prev.col
-          const dy       = next.row - prev.row
-          const len      = Math.sqrt(dx * dx + dy * dy) || 1
-          const px       = (-dy / len) * offset
-          const py       = (dx  / len) * offset
+          const prev = routeTiles[Math.max(0, i - 1)]
+          const next = routeTiles[Math.min(routeTiles.length - 1, i + 1)]
+          const dx   = next.col - prev.col
+          const dy   = next.row - prev.row
+          const len  = Math.sqrt(dx * dx + dy * dy) || 1
+          const px   = (-dy / len) * offset
+          const py   = (dx  / len) * offset
 
           const x = tile.col * TILE_SIZE + TILE_SIZE / 2 + px
           const y = tile.row * TILE_SIZE + TILE_SIZE / 2 + py

@@ -127,7 +127,7 @@ function NodeCard({ node, stars, unlocked, selected, onSelect, onPlay }) {
       {node.modifier !== 'none' && (
         <div style={cardStyles.modChip}>
           <span>{mod.emoji}</span>
-          <span style={{ color: '#c8a048', fontWeight: 600 }}>{mod.label}</span>
+          <span style={{ color: 'var(--color-medium)', fontWeight: 600 }}>{mod.label}</span>
           <span style={{ color: '#888' }}> — {mod.desc}</span>
         </div>
       )}
@@ -276,7 +276,7 @@ const cardStyles = {
     display: 'flex', alignItems: 'center', gap: 6,
   },
   name: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: 12, fontWeight: 700,
     color: '#d8c898', lineHeight: 1.2,
   },
@@ -297,7 +297,7 @@ const cardStyles = {
     background: 'rgba(200,160,72,0.18)',
     border: '1px solid rgba(200,160,72,0.5)',
     borderRadius: 5,
-    color: '#c8a048', fontFamily: "'Cinzel', serif",
+    color: 'var(--color-medium)', fontFamily: 'var(--font-serif)',
     fontSize: 12, fontWeight: 700,
     cursor: 'pointer', width: '100%',
   },
@@ -322,14 +322,14 @@ const s = {
     background: 'none', border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 5, color: '#888', padding: '6px 12px',
     cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     flexShrink: 0,
   },
   titleBlock: { flex: 1 },
   title: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: 'clamp(1.2rem, 3vw, 1.8rem)',
-    fontWeight: 700, color: '#c8a048', margin: '0 0 0.2rem',
+    fontWeight: 700, color: 'var(--color-medium)', margin: '0 0 0.2rem',
   },
   sub: {
     fontSize: 12, color: '#665a48', margin: 0,
@@ -342,12 +342,12 @@ const s = {
     background: 'rgba(255,255,255,0.05)',
     border: '1px solid rgba(255,255,255,0.1)',
     borderRadius: 5, color: '#888', cursor: 'pointer',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
   },
   diffBtnActive: {
     background: 'rgba(200,160,72,0.12)',
     border: '1px solid rgba(200,160,72,0.4)',
-    color: '#c8a048',
+    color: 'var(--color-medium)',
   },
   tree: {
     display: 'flex', flexDirection: 'column', gap: 8,
@@ -370,7 +370,7 @@ const s = {
     color: '#6688aa',
   },
   endlessTitle: {
-    fontFamily: "'Cinzel', serif", fontSize: 13,
+    fontFamily: 'var(--font-serif)', fontSize: 13,
     fontWeight: 700, color: '#8ab0cc',
   },
   endlessSub: {
@@ -380,7 +380,7 @@ const s = {
     textAlign: 'right',
   },
   endlessHi: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: 15, fontWeight: 700, color: '#8ab0cc',
   },
   endlessNote: {

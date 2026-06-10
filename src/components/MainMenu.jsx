@@ -396,7 +396,7 @@ function SaveSlotCard({ slotLabel, data, onLoad, onDelete }) {
         <div style={{
           ...styles.slotFill,
           width: `${(hpRatio * 100).toFixed(0)}%`,
-          background: hpRatio > 0.6 ? '#c9a02a' : hpRatio > 0.3 ? '#c4430a' : '#8b1a1a',
+          background: hpRatio > 0.6 ? '#c9a02a' : hpRatio > 0.3 ? 'var(--color-fire)' : 'var(--color-hard)',
         }} />
       </div>
       <span style={styles.slotTime}>{relativeTime(data.timestamp)}</span>
@@ -452,12 +452,12 @@ const styles = {
   titleBlock: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' },
   ornament:   { color: 'var(--gold-dim)', fontSize: '0.9rem', letterSpacing: '0.5em' },
   title: {
-    fontFamily: "'Cinzel', serif", fontSize: 'clamp(2.5rem, 7vw, 5rem)',
+    fontFamily: 'var(--font-serif)', fontSize: 'clamp(2.5rem, 7vw, 5rem)',
     fontWeight: 700, color: 'var(--gold-bright)', lineHeight: 1,
     textShadow: '0 0 40px rgba(232,196,74,0.3)', letterSpacing: '0.05em',
   },
   titleSub: {
-    fontFamily: "'Cinzel', serif", fontSize: 'clamp(1.1rem, 3vw, 2rem)',
+    fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.1rem, 3vw, 2rem)',
     fontWeight: 400, color: 'var(--bone)', lineHeight: 1,
     letterSpacing: '0.4em', textTransform: 'uppercase',
   },
@@ -466,17 +466,17 @@ const styles = {
     borderRadius: 8, padding: '0.8rem 1.2rem', maxWidth: 480, width: '100%',
   },
   memoHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', color: 'var(--gold-dim)',
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem', color: 'var(--gold-dim)',
     letterSpacing: '0.08em', marginBottom: '0.4rem', textTransform: 'uppercase',
   },
   memoText: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     color: 'var(--bone)', fontSize: '0.95rem', lineHeight: 1.6,
   },
   // Save slots
   saveSection: { width: '100%', maxWidth: 520 },
   saveHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', letterSpacing: '0.15em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.62rem', letterSpacing: '0.15em',
     color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase',
     textAlign: 'left',
   },
@@ -490,29 +490,29 @@ const styles = {
   slotCardEmpty: { opacity: 0.4, justifyContent: 'center', alignItems: 'center', minHeight: 80 },
   slotCardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   slotName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.55rem', letterSpacing: '0.1em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.55rem', letterSpacing: '0.1em',
     color: 'var(--gold-dim)', textTransform: 'uppercase',
   },
-  slotEmptyLabel: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-muted)' },
+  slotEmptyLabel: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-muted)' },
   slotDelete: {
     background: 'transparent', border: 'none', color: 'var(--text-muted)',
     fontSize: '0.9rem', cursor: 'pointer', padding: '0 2px', lineHeight: 1,
   },
-  slotDiff: { fontFamily: "'Cinzel', serif", fontSize: '0.58rem', letterSpacing: '0.05em' },
-  slotWave: { fontFamily: "'Cinzel', serif", fontSize: '0.7rem', fontWeight: 700, color: 'var(--bone)' },
+  slotDiff: { fontFamily: 'var(--font-serif)', fontSize: '0.58rem', letterSpacing: '0.05em' },
+  slotWave: { fontFamily: 'var(--font-serif)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--bone)' },
   slotTrack: { height: 3, background: '#1a1428', borderRadius: 2, overflow: 'hidden' },
   slotFill:  { height: '100%', borderRadius: 2 },
-  slotTime:  { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '0.7rem', color: 'var(--text-muted)' },
+  slotTime:  { fontFamily: 'var(--font-italic)', fontStyle: 'italic', fontSize: '0.7rem', color: 'var(--text-muted)' },
   slotLoadBtn: {
     marginTop: '0.2rem', background: 'var(--gold-mid)', color: '#0d0b0e',
     border: 'none', borderRadius: 4, padding: '0.28rem 0.5rem',
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem', fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.04em', alignSelf: 'flex-end',
   },
   // Difficulty
   diffSection: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', width: '100%' },
   diffLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', letterSpacing: '0.2em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem', letterSpacing: '0.2em',
     color: 'var(--text-muted)', textTransform: 'uppercase',
   },
   diffCards: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', width: '100%', maxWidth: 500 },
@@ -521,33 +521,33 @@ const styles = {
     padding: '0.9rem 0.6rem', borderRadius: 8, border: '1px solid',
     cursor: 'pointer', transition: 'all 0.18s ease', textAlign: 'center',
   },
-  diffCardLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.05em' },
-  diffCardTagline: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.15rem' },
-  diffCardDesc:    { fontFamily: "'Crimson Text', serif", fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.3 },
+  diffCardLabel: { fontFamily: 'var(--font-serif)', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.05em' },
+  diffCardTagline: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.15rem' },
+  diffCardDesc:    { fontFamily: 'var(--font-italic)', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.3 },
   // Action buttons
   actionRow: { display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
   continueBtn: {
     background: 'rgba(232,196,74,0.12)', color: 'var(--gold-bright)',
     border: '1px solid rgba(232,196,74,0.4)', borderRadius: 6,
     padding: '0.55rem 1.2rem', fontSize: '0.85rem',
-    fontFamily: "'Cinzel', serif", fontWeight: 700, cursor: 'pointer',
+    fontFamily: 'var(--font-serif)', fontWeight: 700, cursor: 'pointer',
     letterSpacing: '0.03em',
   },
   primaryBtn: {
     background: 'var(--gold-mid)', color: '#0d0b0e',
     border: 'none', borderRadius: 6, padding: '0.6rem 1.6rem',
-    fontSize: '0.9rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    fontSize: '0.9rem', fontFamily: 'var(--font-serif)', fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.03em',
     boxShadow: '0 4px 20px rgba(232,196,74,0.2)',
   },
   campaignBtn: {
-    background: 'rgba(200,160,72,0.12)', color: '#c8a048',
+    background: 'rgba(200,160,72,0.12)', color: 'var(--color-medium)',
     border: '1px solid rgba(200,160,72,0.4)', borderRadius: 6, padding: '0.6rem 1.6rem',
-    fontSize: '0.9rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    fontSize: '0.9rem', fontFamily: 'var(--font-serif)', fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.03em',
   },
   tagline: {
-    fontFamily: "'Crimson Text', serif", fontSize: '1rem',
+    fontFamily: 'var(--font-italic)', fontSize: '1rem',
     color: 'var(--text-secondary)', lineHeight: 1.7,
   },
   // Stats
@@ -557,20 +557,20 @@ const styles = {
     borderRadius: 8, padding: '0.75rem 1rem',
   },
   statsHeader: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.12em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem', letterSpacing: '0.12em',
     color: 'var(--gold-dim)', marginBottom: '0.5rem', textTransform: 'uppercase',
     textAlign: 'left',
   },
   statsGrid: { display: 'flex', flexDirection: 'column', gap: '0.25rem' },
   statItem:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' },
-  statLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' },
-  statValue: { fontFamily: "'Crimson Text', serif", fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right' },
+  statLabel: { fontFamily: 'var(--font-serif)', fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' },
+  statValue: { fontFamily: 'var(--font-italic)', fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right' },
   // ── Hall of Excellence ─────────────────────────────────────────────────────
   hallSection: { width: '100%', maxWidth: 480 },
   hallToggle: {
     width: '100%', background: 'transparent', color: 'var(--gold-dim)',
     border: '1px solid rgba(232,196,74,0.18)', borderRadius: 5,
-    padding: '0.38rem 0.75rem', fontFamily: "'Cinzel', serif", fontSize: '0.62rem',
+    padding: '0.38rem 0.75rem', fontFamily: 'var(--font-serif)', fontSize: '0.62rem',
     letterSpacing: '0.08em', cursor: 'pointer',
   },
   hallPanel: {
@@ -582,11 +582,11 @@ const styles = {
   lbTabs: { display: 'flex', gap: '0.25rem', marginBottom: '0.35rem' },
   lbTab: {
     flex: 1, background: 'transparent', border: 'none',
-    padding: '0.3rem', fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    padding: '0.3rem', fontFamily: 'var(--font-serif)', fontSize: '0.58rem',
     letterSpacing: '0.06em', cursor: 'pointer', textTransform: 'uppercase',
   },
   lbEmpty: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', margin: '0.5rem 0',
   },
   lbList: { display: 'flex', flexDirection: 'column', gap: '0.2rem' },
@@ -596,23 +596,23 @@ const styles = {
     background: 'rgba(255,255,255,0.025)',
   },
   lbRank: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.7rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.7rem', fontWeight: 700,
     color: 'var(--gold-bright)', minWidth: '2rem', textAlign: 'center',
   },
   lbScore: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.82rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.82rem', fontWeight: 700,
     color: 'var(--bone)', minWidth: '4.5rem',
   },
   lbMeta: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.73rem', color: 'var(--text-secondary)', flex: 1,
   },
   lbDate: {
-    fontFamily: "'Crimson Text', serif", fontSize: '0.68rem',
+    fontFamily: 'var(--font-italic)', fontSize: '0.68rem',
     color: 'var(--text-muted)',
   },
   hallNote: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.73rem', color: 'var(--text-muted)', textAlign: 'center',
     lineHeight: 1.5, marginTop: '0.35rem',
   },
@@ -621,7 +621,7 @@ const styles = {
   achieveToggle: {
     width: '100%', background: 'transparent', color: 'var(--text-muted)',
     border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5,
-    padding: '0.35rem 0.75rem', fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    padding: '0.35rem 0.75rem', fontFamily: 'var(--font-serif)', fontSize: '0.6rem',
     letterSpacing: '0.08em', cursor: 'pointer',
   },
   achievePanel: {
@@ -629,7 +629,7 @@ const styles = {
   },
   achieveCat: { display: 'flex', flexDirection: 'column', gap: '0.3rem' },
   achieveCatLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.55rem', letterSpacing: '0.14em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.55rem', letterSpacing: '0.14em',
     color: 'var(--gold-dim)', textTransform: 'uppercase', marginBottom: '0.1rem',
   },
   achieveCard: {
@@ -640,15 +640,15 @@ const styles = {
   achieveEmoji: { fontSize: '1rem', flexShrink: 0, lineHeight: 1.2, marginTop: '0.05rem' },
   achieveText: { display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1 },
   achieveName: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem', fontWeight: 700,
     letterSpacing: '0.04em',
   },
   achieveDesc: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.35,
   },
   achieveCheck: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.7rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.7rem',
     color: '#60c060', flexShrink: 0, alignSelf: 'center',
   },
   // Layout import
@@ -656,7 +656,7 @@ const styles = {
   importToggle: {
     background: 'transparent', color: 'var(--text-muted)',
     border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5,
-    padding: '0.35rem 0.75rem', fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    padding: '0.35rem 0.75rem', fontFamily: 'var(--font-serif)', fontSize: '0.6rem',
     letterSpacing: '0.08em', cursor: 'pointer', width: '100%',
   },
   importPanel: { marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' },
@@ -670,13 +670,13 @@ const styles = {
   importBtn: {
     background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 5, padding: '0.38rem 0.75rem', color: 'var(--bone)',
-    fontFamily: "'Cinzel', serif", fontSize: '0.62rem', cursor: 'pointer',
+    fontFamily: 'var(--font-serif)', fontSize: '0.62rem', cursor: 'pointer',
   },
   importBtnGo: {
     background: 'var(--gold-mid)', color: '#0d0b0e', border: 'none', fontWeight: 700,
   },
-  importError:   { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', color: '#c04040', fontSize: '0.8rem', margin: 0 },
-  importSuccess: { fontFamily: "'Crimson Text', serif", fontStyle: 'italic', color: '#40a060', fontSize: '0.8rem', margin: 0 },
+  importError:   { fontFamily: 'var(--font-italic)', fontStyle: 'italic', color: '#c04040', fontSize: '0.8rem', margin: 0 },
+  importSuccess: { fontFamily: 'var(--font-italic)', fontStyle: 'italic', color: '#40a060', fontSize: '0.8rem', margin: 0 },
 }
 
 const styleEl = document.createElement('style')

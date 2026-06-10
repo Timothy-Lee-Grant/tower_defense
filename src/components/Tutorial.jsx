@@ -159,18 +159,18 @@ const s = {
     background: 'rgba(232,196,74,0.4)',
   },
   stepLabel: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.52rem',
     letterSpacing: '0.12em', color: 'var(--text-muted)',
     textAlign: 'center', textTransform: 'uppercase',
   },
   title: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.95rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.95rem',
     color: 'var(--gold-bright)', fontWeight: 700,
     margin: 0, textAlign: 'center',
     letterSpacing: '0.04em',
   },
   body: {
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontSize: '0.9rem', color: 'var(--bone)',
     lineHeight: 1.55, margin: 0, textAlign: 'center',
   },
@@ -182,7 +182,7 @@ const s = {
   },
   hintIcon: { fontSize: '0.85rem', flexShrink: 0, marginTop: '1px' },
   hintText: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0,
   },
   actions: {
@@ -193,7 +193,7 @@ const s = {
     background: 'transparent',
     border: 'none',
     color: 'var(--text-muted)',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.62rem',
     cursor: 'pointer',
     letterSpacing: '0.04em',
@@ -206,7 +206,7 @@ const s = {
     borderRadius: 5,
     padding: '0.45rem 1rem',
     fontSize: '0.78rem',
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontWeight: 700,
     cursor: 'pointer',
     letterSpacing: '0.03em',

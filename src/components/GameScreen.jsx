@@ -176,7 +176,7 @@ function UpgradePanel({ col, row, tileId, currentTier, onUpgrade, onSell, onClos
               <span style={{ color: TIER_COLORS[currentTier + 1] }}>
                 ▲ {TIER_LABELS[currentTier + 1]}: {nextTier.label}
               </span>
-              <span style={{ color: canAfford ? '#c8a048' : '#884a2a' }}>
+              <span style={{ color: canAfford ? 'var(--color-medium)' : '#884a2a' }}>
                 {nextTier.cost}g bank
               </span>
             </div>
@@ -254,7 +254,7 @@ const upgradeStyles = {
     width: '100%', padding: '6px 0',
     background: 'rgba(200,160,72,0.15)',
     border: '1px solid rgba(200,160,72,0.4)',
-    borderRadius: 4, color: '#c8a048',
+    borderRadius: 4, color: 'var(--color-medium)',
     cursor: 'pointer', fontSize: 13, fontWeight: 600,
   },
   maxTier: { color: '#60aaff', textAlign: 'center', padding: '6px 0', marginBottom: 8, fontSize: 13 },
@@ -360,7 +360,7 @@ function PlanHints() {
                       ...styles.threatFill,
                       width: `${pct}%`,
                       background: danger
-                        ? `linear-gradient(90deg, #8b1a1a, ${color}88)`
+                        ? `linear-gradient(90deg, var(--color-hard), ${color}88)`
                         : `linear-gradient(90deg, #1a5a1a, ${color}88)`,
                     }} />
                   </div>
@@ -544,11 +544,11 @@ const ds = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
   label: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.52rem',
     color: 'var(--text-muted)', letterSpacing: '0.05em',
   },
   val: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem',
     fontWeight: 600,
   },
   breakdown: {
@@ -556,7 +556,7 @@ const ds = {
     marginTop: '0.4rem',
   },
   chip: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    fontFamily: 'var(--font-serif)', fontSize: '0.58rem',
     color: 'var(--text-secondary)',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(255,255,255,0.08)',
@@ -603,7 +603,7 @@ const styles = {
     overflowY: 'auto',
   },
   hintsHeader: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.6rem',
     letterSpacing: '0.15em',
     color: 'var(--text-muted)',
@@ -611,7 +611,7 @@ const styles = {
     textTransform: 'uppercase',
   },
   hintsWaveName: {
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontStyle: 'italic',
     color: 'var(--gold-bright)',
     fontSize: '1rem',
@@ -628,13 +628,13 @@ const styles = {
     alignItems: 'flex-start',
   },
   incomingName: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.65rem',
     color: 'var(--bone)',
     letterSpacing: '0.05em',
   },
   incomingDesc: {
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontSize: '0.75rem',
     fontStyle: 'italic',
     color: 'var(--text-muted)',
@@ -655,18 +655,18 @@ const styles = {
     borderLeft: '2px solid rgba(232,196,74,0.2)',
   },
   controlKey: {
-    fontFamily: "'Cinzel', serif",
+    fontFamily: 'var(--font-serif)',
     fontSize: '0.6rem',
     color: 'var(--gold-dim)',
     letterSpacing: '0.05em',
   },
   controlVal: {
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontSize: '0.78rem',
     color: 'var(--text-secondary)',
   },
   geraldNote: {
-    fontFamily: "'Crimson Text', serif",
+    fontFamily: 'var(--font-italic)',
     fontStyle: 'italic',
     fontSize: '0.78rem',
     color: 'var(--text-secondary)',
@@ -692,10 +692,10 @@ const styles = {
   },
   threatName: {
     flex: 1,
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.03em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem', letterSpacing: '0.03em',
   },
   threatPct: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', fontWeight: 700,
+    fontFamily: 'var(--font-serif)', fontSize: '0.65rem', fontWeight: 700,
     minWidth: 32, textAlign: 'right',
   },
   threatTrack: {
@@ -708,7 +708,7 @@ const styles = {
     display: 'flex', flexWrap: 'wrap', gap: '0.2rem',
   },
   warnBadge: {
-    fontFamily: "'Cinzel', serif", fontSize: '0.48rem', letterSpacing: '0.05em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.48rem', letterSpacing: '0.05em',
     color: '#e08030', background: 'rgba(200,100,20,0.12)',
     border: '1px solid rgba(200,100,20,0.25)',
     borderRadius: 3, padding: '1px 4px',
@@ -719,7 +719,7 @@ const styles = {
   },
   toggleBtn: {
     flex: 1,
-    fontFamily: "'Cinzel', serif", fontSize: '0.6rem', letterSpacing: '0.05em',
+    fontFamily: 'var(--font-serif)', fontSize: '0.6rem', letterSpacing: '0.05em',
     padding: '0.4rem 0.3rem',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(255,255,255,0.1)',
@@ -732,7 +732,7 @@ const styles = {
     color: 'var(--gold-bright)',
   },
   toggleHint: {
-    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontFamily: 'var(--font-italic)', fontStyle: 'italic',
     fontSize: '0.7rem', color: 'var(--text-muted)',
     marginTop: '0.3rem', lineHeight: 1.4,
   },

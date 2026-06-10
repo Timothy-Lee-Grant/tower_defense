@@ -19,6 +19,20 @@
   --text-muted:     #5a4e3a;
   --border-glow:    rgba(232, 196, 74, 0.25);
 
+  /* Semantic difficulty colours */
+  --color-easy:     #20a060;
+  --color-medium:   #c8a048;
+  --color-hard:     #8b1a1a;
+
+  /* Semantic element colours (alias existing primitives) */
+  --color-poison:   #3d7a1a;
+  --color-ice:      #2a5f8b;
+  --color-fire:     #c4430a;
+
+  /* Typography tokens */
+  --font-serif:     'Cinzel', serif;
+  --font-italic:    'Crimson Text', serif;
+
   font-family: 'Crimson Text', Georgia, serif;
   font-size: 16px;
   line-height: 1.5;
