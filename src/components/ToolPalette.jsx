@@ -1,6 +1,31 @@
-import React from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { DUNGEON_TOOLS, TOOL_CATEGORY, BANK_COST_MULT } from '../game/constants.js'
+import { DUNGEON_TOOLS, TOOL_CATEGORY, BANK_COST_MULT, SYNERGY_PAIRS, HERO_TYPES } from '../game/constants.js'
+
+// Build notes about hero immunities / special interactions for this tool
+function getHeroNotes(tool) {
+  const notes = []
+  const id = tool.id
+  if (tool.slowOnHit) {
+    const immuneHeroes = Object.values(HERO_TYPES).filter(h => h.immuneToSlow).map(h => h.label)
+    if (immuneHeroes.length) notes.push({ text: `Slow-immune: ${immuneHeroes.join(', ')}`, bad: true })
+  }
+  if (tool.poisonOnHit || id === 'poison' || id === 'spider') {
+    const immuneHeroes = Object.values(HERO_TYPES).filter(h => h.immuneToPoison).map(h => h.label)
+    if (immuneHeroes.length) notes.push({ text: `Poison-immune: ${immuneHeroes.join(', ')}`, bad: true })
+  }
+  if (id === 'fire') {
+    const resistHeroes = Object.values(HERO_TYPES).filter(h => h.fireResist).map(h =>
+      `${h.label} (${Math.round(h.fireResist * 100)}% resist)`)
+    if (resistHeroes.length) notes.push({ text: `Fire resist: ${resistHeroes.join(', ')}`, bad: true })
+  }
+  if (tool.targetGoldCarriers) notes.push({ text: '2× damage vs gold carriers fleeing', bad: false })
+  if (tool.aoeAttack)           notes.push({ text: 'AoE — hits ALL heroes in range', bad: false })
+  if ((id === 'spike' || id === 'boulder') && Object.values(HERO_TYPES).some(h => h.canDisarm || h.boulderResist)) {
+    notes.push({ text: 'Warlord destroys on-path traps; Thief disarms spikes', bad: true })
+  }
+  return notes
+}
 
 const CATEGORY_LABELS = {
   [TOOL_CATEGORY.TRAPS]:      '⚠ Traps',
@@ -17,6 +42,23 @@ export default function ToolPalette() {
   const unlockedTools  = useGameStore(s => s.unlockedTools)
   const selectTool     = useGameStore(s => s.selectTool)
   const selectCategory = useGameStore(s => s.selectCategory)
+
+  // Tooltip state — which tool is hovered, and the tooltip position
+  const [tooltip, setTooltip]       = useState(null)   // { tool, rect }
+  const tooltipTimerRef             = useRef(null)
+
+  const handleToolMouseEnter = useCallback((e, tool) => {
+    clearTimeout(tooltipTimerRef.current)
+    const rect = e.currentTarget.getBoundingClientRect()
+    tooltipTimerRef.current = setTimeout(() => {
+      setTooltip({ tool, rect })
+    }, 400)
+  }, [])
+
+  const handleToolMouseLeave = useCallback(() => {
+    clearTimeout(tooltipTimerRef.current)
+    setTooltip(null)
+  }, [])
 
   const isWave     = phase === PHASE.WAVE
   const isDisabled = phase !== PHASE.PLAN && phase !== PHASE.WAVE
@@ -68,6 +110,8 @@ export default function ToolPalette() {
             <button
               key={tool.id}
               onClick={() => isActive && selectTool(isSelected ? null : tool.id)}
+              onMouseEnter={(e) => isUnlocked && handleToolMouseEnter(e, tool)}
+              onMouseLeave={handleToolMouseLeave}
               style={{
                 ...styles.toolBtn,
                 ...(isSelected ? styles.toolBtnSelected : {}),
@@ -75,13 +119,6 @@ export default function ToolPalette() {
                 ...(!canAfford && isUnlocked ? styles.toolBtnCantAfford : {}),
                 cursor: isActive ? 'pointer' : 'not-allowed',
               }}
-              title={
-                !isUnlocked
-                  ? 'Locked — earn from upgrade cards'
-                  : isWave
-                    ? `War chest cost: ${displayCost}g (1.5× emergency premium)`
-                    : tool.description
-              }
             >
               <div style={styles.toolHeader}>
                 <span style={styles.toolEmoji}>{tool.emoji}</span>
@@ -129,8 +166,159 @@ export default function ToolPalette() {
             ? 'Right-click a tile to sell it (50% refund)'
             : ''}
       </div>
+
+      {/* Hover tooltip — rendered as a fixed overlay */}
+      {tooltip && <ToolTooltip tool={tooltip.tool} anchorRect={tooltip.rect} />}
     </div>
   )
+}
+
+// ── Hover tooltip ─────────────────────────────────────────────────────────────
+function ToolTooltip({ tool, anchorRect }) {
+  const synergies = []
+  // Collect synergy partners from both directions
+  if (SYNERGY_PAIRS[tool.id]) {
+    Object.keys(SYNERGY_PAIRS[tool.id]).forEach(partnerId => {
+      const partner = DUNGEON_TOOLS.find(t => t.id === partnerId)
+      if (partner) synergies.push(partner.label)
+    })
+  }
+  Object.entries(SYNERGY_PAIRS).forEach(([otherId, pairs]) => {
+    if (pairs[tool.id]) {
+      const partner = DUNGEON_TOOLS.find(t => t.id === otherId)
+      if (partner && !synergies.includes(partner.label)) synergies.push(partner.label)
+    }
+  })
+
+  const heroNotes = getHeroNotes(tool)
+
+  // Position: to the right of the palette (or left if no room)
+  const TIP_W = 230
+  const TIP_X = anchorRect.right + 8
+  const TIP_Y = Math.min(anchorRect.top, window.innerHeight - 320)
+
+  return (
+    <div style={{
+      ...tt.root,
+      left: TIP_X,
+      top:  TIP_Y,
+    }}>
+      {/* Header */}
+      <div style={tt.header}>
+        <span style={tt.emoji}>{tool.emoji}</span>
+        <span style={tt.name}>{tool.label}</span>
+        <span style={tt.cost}>{tool.cost}g</span>
+      </div>
+
+      {/* Description */}
+      <p style={tt.desc}>{tool.description}</p>
+
+      {/* Stats */}
+      {(tool.damage || tool.range || tool.attackSpeed || tool.dotDamage) && (
+        <div style={tt.statsBlock}>
+          {tool.damage      && <StatRow label="Damage"     val={tool.damage} />}
+          {tool.range       && <StatRow label="Range"      val={tool.range} />}
+          {tool.attackSpeed && <StatRow label="Speed"      val={`${(tool.attackSpeed/1000).toFixed(2)}s`} />}
+          {tool.dotDamage   && <StatRow label="DoT HP/s"   val={tool.dotDamage} />}
+          {tool.damage && tool.attackSpeed && (
+            <StatRow label="DPS" val={(tool.damage / (tool.attackSpeed / 1000)).toFixed(1)} highlight />
+          )}
+        </div>
+      )}
+
+      {/* Synergies */}
+      {synergies.length > 0 && (
+        <div style={tt.section}>
+          <div style={tt.sectionLabel}>✦ Pairs well with</div>
+          <div style={tt.chips}>
+            {synergies.map(name => (
+              <span key={name} style={tt.chip}>{name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hero notes */}
+      {heroNotes.length > 0 && (
+        <div style={tt.section}>
+          <div style={tt.sectionLabel}>⚔ vs Heroes</div>
+          {heroNotes.map((n, i) => (
+            <div key={i} style={{ ...tt.noteRow, color: n.bad ? '#e07050' : '#60c080' }}>
+              {n.bad ? '⚠ ' : '✓ '}{n.text}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatRow({ label, val, highlight }) {
+  return (
+    <div style={tt.statRow}>
+      <span style={tt.statLabel}>{label}</span>
+      <span style={{ ...tt.statVal, color: highlight ? 'var(--gold-bright)' : 'var(--bone)' }}>{val}</span>
+    </div>
+  )
+}
+
+const tt = {
+  root: {
+    position: 'fixed',
+    zIndex: 9999,
+    width: 230,
+    background: 'rgba(10,8,16,0.97)',
+    border: '1px solid rgba(232,196,74,0.3)',
+    borderRadius: 7,
+    padding: '0.7rem 0.85rem',
+    boxShadow: '0 6px 28px rgba(0,0,0,0.7)',
+    pointerEvents: 'none',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem',
+  },
+  emoji: { fontSize: '1.2rem', flexShrink: 0 },
+  name: {
+    flex: 1,
+    fontFamily: "'Cinzel', serif", fontSize: '0.78rem',
+    color: 'var(--gold-bright)', fontWeight: 700,
+  },
+  cost: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.7rem',
+    color: 'var(--gold-dim)', fontWeight: 700,
+  },
+  desc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.78rem', color: 'var(--text-secondary)',
+    lineHeight: 1.45, margin: '0 0 0.5rem',
+  },
+  statsBlock: {
+    display: 'flex', flexDirection: 'column', gap: '0.12rem',
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: 4, padding: '0.4rem 0.55rem',
+    marginBottom: '0.5rem',
+  },
+  statRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  statLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.55rem', color: 'var(--text-muted)', letterSpacing: '0.06em' },
+  statVal:   { fontFamily: "'Cinzel', serif", fontSize: '0.65rem', color: 'var(--bone)', fontWeight: 600 },
+  section: { marginBottom: '0.4rem' },
+  sectionLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    color: 'var(--text-muted)', letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: '0.25rem',
+  },
+  chips: { display: 'flex', flexWrap: 'wrap', gap: '0.25rem' },
+  chip: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    color: 'rgba(60,255,180,0.85)',
+    background: 'rgba(40,220,160,0.08)',
+    border: '1px solid rgba(40,220,160,0.2)',
+    borderRadius: 3, padding: '1px 6px',
+  },
+  noteRow: {
+    fontFamily: "'Crimson Text', serif", fontSize: '0.72rem', lineHeight: 1.4, marginTop: '0.15rem',
+  },
 }
 
 function DpsLine({ tool }) {

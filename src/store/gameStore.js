@@ -134,6 +134,7 @@ export const useGameStore = create((set, get) => ({
   trapTimers:     {},
   tileUpgrades:   {},   // "col,row" → tier (1 or 2)
   simulationRef:  null,
+  wavePaused:     false,   // Feature 17.6 — pause during wave
 
   // Wave stats — treasureMaxHp tracks the difficulty-specific ceiling for the HP bar ratio
   treasureMaxHp:  DIFFICULTIES.medium.treasureHp,
@@ -701,6 +702,7 @@ export const useGameStore = create((set, get) => ({
 
     set({
       phase:           PHASE.WAVE,
+      wavePaused:      false,   // Feature 17.6 — ensure unpaused at wave start
       heroes,
       treasureHp:      get().treasureMaxHp,
       heroesKilled:    0,
@@ -778,6 +780,14 @@ export const useGameStore = create((set, get) => ({
     const loop = (now) => {
       const state = get()
       if (state.phase !== PHASE.WAVE) return
+
+      // ── Feature 17.6: Pause check — freeze simulation while paused ───────────
+      if (state.wavePaused) {
+        lastTime = now   // reset lastTime so no time-skip when resuming
+        const rafId = requestAnimationFrame(loop)
+        set({ simulationRef: rafId })
+        return
+      }
 
       let deltaMs = Math.min(now - lastTime, 100) // cap delta to avoid huge jumps
       lastTime = now
@@ -1208,6 +1218,10 @@ export const useGameStore = create((set, get) => ({
     const rafId = requestAnimationFrame(loop)
     set({ simulationRef: rafId })
   },
+
+  // ── Feature 17.6: Pause / resume during wave ────────────────────────────────
+  pauseWave()  { set({ wavePaused: true })  },
+  resumeWave() { set({ wavePaused: false }) },
 
   endWave() {
     const {

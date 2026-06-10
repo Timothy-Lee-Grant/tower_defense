@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useGameStore } from '../store/gameStore.js'
 import { selectResultsComment } from '../game/gerald.js'
-import { WAVE_CONFIGS } from '../game/constants.js'
+import { WAVE_CONFIGS, DUNGEON_TOOLS, SYNERGY_PAIRS } from '../game/constants.js'
 import { getAchievement } from '../game/scoring.js'
 
 export default function ResultsScreen() {
@@ -22,7 +22,8 @@ export default function ResultsScreen() {
   // Dark Lord's demand for the wave that just completed
   const demand = WAVE_CONFIGS[waveIndex]?.darkLordDemand ?? null
 
-  const [picked, setPicked] = useState(false)
+  const [picked, setPicked]       = useState(false)
+  const [hoveredCard, setHoveredCard] = useState(null)   // index of hovered upgrade card
 
   // Use the store's difficulty-adjusted max, not the hardcoded constant (spec bug 18.6)
   const hpRatio   = treasureMaxHp > 0 ? treasureHp / treasureMaxHp : 1
@@ -174,34 +175,49 @@ export default function ResultsScreen() {
                 ? 'One new capability — plus a bonus option from the Dark Lord'
                 : 'One new capability for the next wave'}
             </p>
-            <div style={{
-              ...s.cards,
-              gridTemplateColumns: upgradeCards.length === 4 ? 'repeat(4,1fr)' : 'repeat(3,1fr)',
-            }}>
-              {upgradeCards.map((card, i) => (
-                <button key={i} style={{
-                  ...s.card,
-                  ...(card.isDemandReward ? s.cardDemandReward : {}),
-                }} onClick={() => handlePick(card)}>
-                  {card.isDemandReward && (
-                    <div style={s.cardDemandBadge}>🔱 Dark Lord's Reward</div>
-                  )}
-                  <div style={s.cardEmoji}>{card.type === 'unlock' ? card.tool.emoji : '💰'}</div>
-                  <div style={s.cardName}>
-                    {card.type === 'unlock' ? card.tool.label : `+${card.amount} Gold`}
-                  </div>
-                  {card.type === 'unlock' && <>
-                    <div style={s.cardMeta}>
-                      {card.tool.placesOn === 'path' ? '📍 On-path' : '🏹 Tower'} · Tier {card.tool.tier}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+              <div style={{
+                ...s.cards,
+                gridTemplateColumns: upgradeCards.length === 4 ? 'repeat(4,1fr)' : 'repeat(3,1fr)',
+                flex: 1,
+              }}>
+                {upgradeCards.map((card, i) => (
+                  <button
+                    key={i}
+                    style={{
+                      ...s.card,
+                      ...(card.isDemandReward ? s.cardDemandReward : {}),
+                      ...(hoveredCard === i ? s.cardHovered : {}),
+                    }}
+                    onClick={() => handlePick(card)}
+                    onMouseEnter={() => setHoveredCard(i)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    {card.isDemandReward && (
+                      <div style={s.cardDemandBadge}>🔱 Dark Lord's Reward</div>
+                    )}
+                    <div style={s.cardEmoji}>{card.type === 'unlock' ? card.tool.emoji : '💰'}</div>
+                    <div style={s.cardName}>
+                      {card.type === 'unlock' ? card.tool.label : `+${card.amount} Gold`}
                     </div>
-                    <p style={s.cardDesc}>{card.tool.description}</p>
-                  </>}
-                  {card.type === 'gold' && (
-                    <p style={s.cardDesc}>Deposited directly to your gold reserve.</p>
-                  )}
-                  <div style={s.cardPickBtn}>Select →</div>
-                </button>
-              ))}
+                    {card.type === 'unlock' && <>
+                      <div style={s.cardMeta}>
+                        {card.tool.placesOn === 'path' ? '📍 On-path' : '🏹 Tower'} · Tier {card.tool.tier}
+                      </div>
+                      <p style={s.cardDesc}>{card.tool.description}</p>
+                    </>}
+                    {card.type === 'gold' && (
+                      <p style={s.cardDesc}>Deposited directly to your gold reserve.</p>
+                    )}
+                    <div style={s.cardPickBtn}>Select →</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Hover preview panel */}
+              {hoveredCard !== null && upgradeCards[hoveredCard]?.type === 'unlock' && (
+                <CardPreview card={upgradeCards[hoveredCard]} />
+              )}
             </div>
           </div>
         )}
@@ -212,6 +228,86 @@ export default function ResultsScreen() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Upgrade card hover preview ────────────────────────────────────────────────
+function CardPreview({ card }) {
+  const tool = card.tool
+  if (!tool) return null
+
+  // Show tier label instead of wave lookup (WAVE_CONFIGS doesn't track per-tool appearances)
+  const tierLabel = tool.tier === 1 ? 'Tier 1 — starter' : tool.tier === 2 ? 'Tier 2 — mid-game' : tool.tier === 3 ? 'Tier 3 — late-game' : null
+
+  // Build synergy list
+  const synergies = []
+  if (SYNERGY_PAIRS[tool.id]) {
+    Object.keys(SYNERGY_PAIRS[tool.id]).forEach(pid => {
+      const p = DUNGEON_TOOLS.find(t => t.id === pid)
+      if (p) synergies.push(p.label)
+    })
+  }
+  Object.entries(SYNERGY_PAIRS).forEach(([oid, pairs]) => {
+    if (pairs[tool.id]) {
+      const p = DUNGEON_TOOLS.find(t => t.id === oid)
+      if (p && !synergies.includes(p.label)) synergies.push(p.label)
+    }
+  })
+
+  return (
+    <div style={s.cardPreview}>
+      <div style={s.cardPreviewHeader}>
+        <span style={{ fontSize: '1.4rem' }}>{tool.emoji}</span>
+        <div>
+          <div style={s.cardPreviewName}>{tool.label}</div>
+          <div style={s.cardPreviewMeta}>
+            {tool.placesOn === 'path' ? '📍 On-path trap' : '🏹 Off-path tower'} · {tool.cost}g
+          </div>
+        </div>
+      </div>
+
+      <p style={s.cardPreviewDesc}>{tool.description}</p>
+
+      {/* Stats */}
+      {(tool.damage || tool.range || tool.attackSpeed || tool.dotDamage) && (
+        <div style={s.cardPreviewStats}>
+          {tool.damage      && <CPStatRow label="Damage"    val={tool.damage} />}
+          {tool.range       && <CPStatRow label="Range"     val={tool.range} />}
+          {tool.attackSpeed && <CPStatRow label="Speed"     val={`${(tool.attackSpeed/1000).toFixed(2)}s`} />}
+          {tool.dotDamage   && <CPStatRow label="DoT HP/s"  val={tool.dotDamage} />}
+          {tool.damage && tool.attackSpeed && (
+            <CPStatRow label="DPS" val={(tool.damage / (tool.attackSpeed / 1000)).toFixed(1)} gold />
+          )}
+        </div>
+      )}
+
+      {tierLabel && (
+        <div style={s.cardPreviewRow}>
+          <span style={s.cardPreviewRowLabel}>Classification</span>
+          <span style={s.cardPreviewRowVal}>{tierLabel}</span>
+        </div>
+      )}
+
+      {synergies.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <div style={s.cardPreviewRowLabel}>✦ Synergizes with</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
+            {synergies.map(name => (
+              <span key={name} style={s.cardPreviewChip}>{name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CPStatRow({ label, val, gold }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span style={s.cardPreviewRowLabel}>{label}</span>
+      <span style={{ ...s.cardPreviewRowVal, color: gold ? 'var(--gold-bright)' : 'var(--bone)' }}>{val}</span>
     </div>
   )
 }
@@ -376,6 +472,66 @@ const s = {
   achieveDesc: {
     fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
     fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4,
+  },
+
+  // Card hover highlight
+  cardHovered: {
+    border: '1px solid rgba(232,196,74,0.45)',
+    background: 'rgba(232,196,74,0.09)',
+    transform: 'translateY(-2px)',
+    transition: 'all 0.15s',
+  },
+
+  // Card preview side panel
+  cardPreview: {
+    width: 210, flexShrink: 0,
+    background: 'rgba(14,10,22,0.98)',
+    border: '1px solid rgba(232,196,74,0.25)',
+    borderRadius: 9, padding: '1rem',
+    display: 'flex', flexDirection: 'column', gap: '0.5rem',
+    alignSelf: 'flex-start',
+  },
+  cardPreviewHeader: {
+    display: 'flex', alignItems: 'center', gap: '0.6rem',
+  },
+  cardPreviewName: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.82rem',
+    color: 'var(--gold-bright)', fontWeight: 700,
+  },
+  cardPreviewMeta: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    color: 'var(--text-muted)', letterSpacing: '0.06em',
+    marginTop: '0.1rem',
+  },
+  cardPreviewDesc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.78rem', color: 'var(--text-secondary)',
+    lineHeight: 1.4, margin: 0,
+  },
+  cardPreviewStats: {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: 5, padding: '0.45rem 0.6rem',
+    display: 'flex', flexDirection: 'column', gap: '0.18rem',
+  },
+  cardPreviewRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  },
+  cardPreviewRowLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    color: 'var(--text-muted)', letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+  },
+  cardPreviewRowVal: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.65rem',
+    color: 'var(--bone)', fontWeight: 600,
+  },
+  cardPreviewChip: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.5rem',
+    color: 'rgba(60,255,180,0.85)',
+    background: 'rgba(40,220,160,0.07)',
+    border: '1px solid rgba(40,220,160,0.2)',
+    borderRadius: 3, padding: '1px 6px',
   },
 
   // 4th card (demand reward)

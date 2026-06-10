@@ -13,6 +13,9 @@ export default function HUD() {
   const heroesKilled   = useGameStore(s => s.heroesKilled)
   const startWave      = useGameStore(s => s.startWave)
   const goToMenu       = useGameStore(s => s.goToMenu)
+  const wavePaused     = useGameStore(s => s.wavePaused)
+  const pauseWave      = useGameStore(s => s.pauseWave)
+  const resumeWave     = useGameStore(s => s.resumeWave)
 
   const difficulty    = useGameStore(s => s.difficulty)
   const treasureMaxHp = useGameStore(s => s.treasureMaxHp)
@@ -174,10 +177,17 @@ export default function HUD() {
         )}
         {phase === PHASE.WAVE && (
           <div style={styles.waveIndicator}>
-            <span style={styles.wavePulse}>⚡</span>
+            {!wavePaused && <span style={styles.wavePulse}>⚡</span>}
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontFamily: "'Cinzel', serif" }}>
-              WAVE IN PROGRESS
+              {wavePaused ? '⏸ PAUSED' : 'WAVE IN PROGRESS'}
             </span>
+            <button
+              style={{ ...styles.menuBtn, fontSize: '0.8rem', padding: '0.3rem 0.5rem' }}
+              onClick={() => wavePaused ? resumeWave() : pauseWave()}
+              title={wavePaused ? 'Resume wave (Esc)' : 'Pause wave (Esc)'}
+            >
+              {wavePaused ? '▶' : '⏸'}
+            </button>
           </div>
         )}
         {/* Audio controls */}

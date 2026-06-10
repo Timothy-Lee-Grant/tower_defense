@@ -3,10 +3,17 @@ import { useGameStore, PHASE } from '../store/gameStore.js'
 import { selectWaveComment } from '../game/gerald.js'
 
 export default function BattleLog() {
-  const phase     = useGameStore(s => s.phase)
-  const battleLog = useGameStore(s => s.battleLog)
-  const heroes    = useGameStore(s => s.heroes)
-  const scrollRef = useRef(null)
+  const phase      = useGameStore(s => s.phase)
+  const battleLog  = useGameStore(s => s.battleLog)
+  const heroes     = useGameStore(s => s.heroes)
+  const layoutData = useGameStore(s => s.layoutData)
+  const scrollRef  = useRef(null)
+
+  // Compute treasure tile index in pathTiles for distance calculation
+  const treasurePathIdx = useMemo(() => {
+    const { pathTiles, treasure } = layoutData
+    return pathTiles.findIndex(t => t.col === treasure.col && t.row === treasure.row)
+  }, [layoutData])
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -70,6 +77,29 @@ export default function BattleLog() {
             const isDead    = hero.state === 'dead'
             const isEscaped = hero.state === 'escaped'
 
+            // Distance from treasure / progress along path
+            const pathLen = layoutData.pathTiles.length
+            let distLabel = ''
+            if (hero.state === 'moving' && pathLen > 0 && treasurePathIdx > 0) {
+              if (!hero.hasGold) {
+                const pct = Math.min(100, Math.round(hero.pathIndex / treasurePathIdx * 100))
+                distLabel = `${pct}% to 💰`
+              } else {
+                const returnLen = pathLen - 1 - treasurePathIdx
+                const returnProgress = returnLen > 0
+                  ? Math.min(100, Math.round((hero.pathIndex - treasurePathIdx) / returnLen * 100))
+                  : 100
+                distLabel = `${returnProgress}% to exit`
+              }
+            }
+
+            // Speed ratio vs base speed (shows slow, tar, etc.)
+            const baseSpeed = hero.baseSpeed ?? hero.speed
+            const effectiveSlowLabel = hero.slowed ? '½ spd' : null
+
+            // Drain indicator — bat has reduced hero maxHp
+            const isDrained = hero.baseMaxHp && hero.maxHp < hero.baseMaxHp * 0.96
+
             return (
               <div key={hero.id} style={{ ...s.heroRow, opacity: isDead ? 0.38 : isEscaped ? 0.55 : 1 }}>
                 <span style={{ fontSize: '1rem' }}>{hero.emoji}</span>
@@ -77,9 +107,11 @@ export default function BattleLog() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={s.heroName}>{hero.label}</span>
                     <span style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                      {hero.slowed   && <span style={s.badgeBlue}>❄</span>}
-                      {hero.poisoned && <span style={s.badgeGreen}>☠</span>}
-                      {hero.hasGold  && !isDead && <span style={s.badgeGold}>💰</span>}
+                      {hero.slowed            && <span style={s.badgeBlue}  title="Slowed">❄</span>}
+                      {hero.poisoned          && <span style={s.badgeGreen} title="Poisoned">☠</span>}
+                      {(hero.curseStacks > 0) && <span style={s.badgePurple} title={`Cursed ×${hero.curseStacks}`}>👁</span>}
+                      {isDrained              && <span style={s.badgeDrain}  title="Max HP drained">💉</span>}
+                      {hero.hasGold && !isDead && <span style={s.badgeGold}>💰</span>}
                       <span style={{
                         ...s.heroSubtext,
                         color: isDead ? '#8b1a1a' : isEscaped ? '#c9a02a' : 'var(--text-muted)',
@@ -92,15 +124,23 @@ export default function BattleLog() {
                     </span>
                   </div>
                   {hero.state === 'moving' && (
-                    <div style={s.hpTrack}>
-                      <div style={{
-                        ...s.hpFill,
-                        width: `${(ratio * 100).toFixed(1)}%`,
-                        background: hero.hasGold
-                          ? (ratio > 0.5 ? '#c9a02a' : '#8b1a1a')
-                          : (ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'),
-                      }} />
-                    </div>
+                    <>
+                      <div style={s.hpTrack}>
+                        <div style={{
+                          ...s.hpFill,
+                          width: `${(ratio * 100).toFixed(1)}%`,
+                          background: hero.hasGold
+                            ? (ratio > 0.5 ? '#c9a02a' : '#8b1a1a')
+                            : (ratio > 0.6 ? '#3d7a1a' : ratio > 0.3 ? '#c9a02a' : '#8b1a1a'),
+                        }} />
+                      </div>
+                      {(distLabel || effectiveSlowLabel) && (
+                        <div style={s.heroMeta}>
+                          {distLabel && <span style={s.heroMetaChip}>{distLabel}</span>}
+                          {effectiveSlowLabel && <span style={{ ...s.heroMetaChip, color: '#60aaff' }}>{effectiveSlowLabel}</span>}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -183,9 +223,21 @@ const s = {
   heroSubtext: {
     fontSize: '0.68rem', fontFamily: "'Crimson Text', serif", color: 'var(--text-muted)',
   },
-  badgeGold:  { fontSize: '0.65rem', color: '#c9a02a' },
-  badgeBlue:  { fontSize: '0.65rem', color: '#5a9abf' },
-  badgeGreen: { fontSize: '0.65rem', color: '#3d7a1a' },
+  badgeGold:   { fontSize: '0.65rem', color: '#c9a02a' },
+  badgeBlue:   { fontSize: '0.65rem', color: '#5a9abf' },
+  badgeGreen:  { fontSize: '0.65rem', color: '#3d7a1a' },
+  badgePurple: { fontSize: '0.65rem', color: '#a040e0' },
+  badgeDrain:  { fontSize: '0.65rem', color: '#8040a0' },
+  heroMeta: {
+    display: 'flex', gap: '0.3rem', marginTop: '2px',
+  },
+  heroMetaChip: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.48rem',
+    color: 'var(--text-muted)', letterSpacing: '0.04em',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: 3, padding: '1px 4px',
+  },
   hpTrack: {
     height: 3, background: '#1e1428', borderRadius: 2,
     overflow: 'hidden', marginTop: 2,

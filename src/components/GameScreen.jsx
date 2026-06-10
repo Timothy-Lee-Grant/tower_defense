@@ -1,14 +1,16 @@
 import React, { useMemo, useState, useCallback } from 'react'
 import { useGameStore, PHASE } from '../store/gameStore.js'
-import { WAVE_CONFIGS, HERO_TYPES, DUNGEON_TOOLS, UPGRADE_TIERS, getEffectiveTool } from '../game/constants.js'
+import { WAVE_CONFIGS, HERO_TYPES, DUNGEON_TOOLS, UPGRADE_TIERS, getEffectiveTool, TILE } from '../game/constants.js'
 import { selectSynergyComment } from '../game/gerald.js'
-import { estimateSurvival, getImmunityWarnings, HERO_PATH_COLORS } from '../game/analysis.js'
+import { estimateSurvival, getImmunityWarnings, HERO_PATH_COLORS, computeCoverageMap } from '../game/analysis.js'
 import { encodeLayout } from '../game/persistence.js'
 import DungeonGrid from './DungeonGrid.jsx'
 import ToolPalette from './ToolPalette.jsx'
 import BattleLog from './BattleLog.jsx'
 import HUD from './HUD.jsx'
 import GlobalEventOverlay from './GlobalEventOverlay.jsx'
+import PauseMenu from './PauseMenu.jsx'
+import Tutorial from './Tutorial.jsx'
 
 export default function GameScreen() {
   const phase          = useGameStore(s => s.phase)
@@ -18,9 +20,24 @@ export default function GameScreen() {
   const upgradeTile    = useGameStore(s => s.upgradeTile)
   const tileUpgrades   = useGameStore(s => s.tileUpgrades)
   const grid           = useGameStore(s => s.grid)
+  const wavePaused     = useGameStore(s => s.wavePaused)
+  const pauseWave      = useGameStore(s => s.pauseWave)
+  const resumeWave     = useGameStore(s => s.resumeWave)
 
   // Upgrade panel state — { col, row } or null
   const [upgradeTarget, setUpgradeTarget] = useState(null)
+
+  // Escape key to toggle pause during wave
+  React.useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key !== 'Escape') return
+      if (phase === PHASE.WAVE) {
+        wavePaused ? resumeWave() : pauseWave()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [phase, wavePaused, pauseWave, resumeWave])
 
   // During a wave, tile clicks spend from the war chest at 1.5× cost.
   const handleTileClick = phase === PHASE.WAVE ? bankPlaceTile : placeTile
@@ -69,6 +86,12 @@ export default function GameScreen() {
           />
           {/* Global Event announcement overlay — shown at wave start */}
           <GlobalEventOverlay />
+
+          {/* Pause menu overlay */}
+          {wavePaused && <PauseMenu />}
+
+          {/* First-time tutorial overlay */}
+          <Tutorial />
 
           {/* Upgrade panel overlaid on grid */}
           {upgradeTarget && (
@@ -397,12 +420,16 @@ function PlanHints() {
         </button>
       </div>
 
+      {/* Dungeon Stats summary (Feature 17.5) */}
+      <DungeonStats grid={grid} layoutData={layoutData} />
+
       {/* Controls */}
       <div style={{ marginTop: '1rem', ...styles.hintsHeader }}>📖 CONTROLS</div>
       <div style={styles.controlsList}>
         {[
           ['Left click', 'Place selected tool'],
           ['Right click', 'Sell tile (50% refund)'],
+          ['Esc / ⏸', 'Pause during wave'],
           ['During wave', '⚔ costs from War Chest'],
           ['⚔ Send Them In', 'Begin the wave'],
         ].map(([key, val]) => (
@@ -425,6 +452,118 @@ function PlanHints() {
 }
 
 // WavePanel removed — BattleLog is now shown on the right during waves.
+
+// ── Dungeon Stats summary (Feature 17.5) ─────────────────────────────────────
+const STRUCTURAL = new Set(['empty', 'path', 'entrance', 'treasure'])
+
+function DungeonStats({ grid, layoutData }) {
+  const stats = useMemo(() => {
+    if (!grid || !layoutData) return null
+
+    // Count tools placed and total gold invested
+    let totalGold = 0
+    let totalDps  = 0
+    const counts  = {}
+
+    for (const row of grid) {
+      for (const cell of row) {
+        if (STRUCTURAL.has(cell)) continue
+        const tool = DUNGEON_TOOLS.find(t => t.id === cell)
+        if (!tool) continue
+        counts[cell] = (counts[cell] ?? 0) + 1
+        totalGold += tool.cost ?? 0
+        if (tool.damage && tool.attackSpeed) {
+          totalDps += tool.damage / (tool.attackSpeed / 1000)
+        }
+      }
+    }
+
+    const placedCount = Object.values(counts).reduce((a, b) => a + b, 0)
+
+    // Coverage % — how many path tiles have at least one tower in range
+    const coverage = computeCoverageMap(grid, layoutData.pathTiles)
+    const coveredPathTiles = layoutData.pathTiles.filter(pt => (coverage[pt.row]?.[pt.col] ?? 0) > 0)
+    const coveragePct = layoutData.pathTiles.length > 0
+      ? Math.round(coveredPathTiles.length / layoutData.pathTiles.length * 100)
+      : 0
+
+    return { totalGold, totalDps: totalDps.toFixed(1), placedCount, coveragePct, counts }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid])
+
+  if (!stats || stats.placedCount === 0) return null
+
+  return (
+    <div style={{ marginTop: '1rem' }}>
+      <div style={styles.hintsHeader}>🏰 DUNGEON STATS</div>
+      <div style={ds.panel}>
+        <DSRow label="Structures"  val={stats.placedCount} />
+        <DSRow label="Gold invested" val={`${stats.totalGold}g`} />
+        <DSRow label="Est. DPS"    val={stats.totalDps} highlight />
+        <DSRow label="Path coverage" val={`${stats.coveragePct}%`} highlight={stats.coveragePct > 70} warn={stats.coveragePct < 40} />
+      </div>
+      {/* Tool type breakdown */}
+      {Object.keys(stats.counts).length > 0 && (
+        <div style={ds.breakdown}>
+          {Object.entries(stats.counts).map(([id, count]) => {
+            const tool = DUNGEON_TOOLS.find(t => t.id === id)
+            if (!tool) return null
+            return (
+              <span key={id} style={ds.chip} title={tool.label}>
+                {tool.emoji} ×{count}
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DSRow({ label, val, highlight, warn }) {
+  return (
+    <div style={ds.row}>
+      <span style={ds.label}>{label}</span>
+      <span style={{
+        ...ds.val,
+        color: warn ? '#e06040' : highlight ? 'var(--gold-bright)' : 'var(--bone)',
+      }}>{val}</span>
+    </div>
+  )
+}
+
+const ds = {
+  panel: {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: 5, padding: '0.45rem 0.6rem',
+    display: 'flex', flexDirection: 'column', gap: '0.2rem',
+    marginTop: '0.4rem',
+  },
+  row: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  },
+  label: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.52rem',
+    color: 'var(--text-muted)', letterSpacing: '0.05em',
+  },
+  val: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.65rem',
+    fontWeight: 600,
+  },
+  breakdown: {
+    display: 'flex', flexWrap: 'wrap', gap: '0.3rem',
+    marginTop: '0.4rem',
+  },
+  chip: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    color: 'var(--text-secondary)',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 4, padding: '2px 6px',
+    cursor: 'default',
+  },
+}
 
 const styles = {
   root: {
