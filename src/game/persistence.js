@@ -226,6 +226,24 @@ export function recordLeaderboardEntry(difficulty, entry) {
   return rank >= 0 ? rank + 1 : null
 }
 
+// ── Feature 16: Run Replay ────────────────────────────────────────────────────
+const REPLAY_KEY = 'da_run_replay'
+
+// Save the current run's per-wave replay array to localStorage.
+// Overwrites any prior replay — only the most recent run is retained.
+export function saveRunReplay(replays) {
+  try { localStorage.setItem(REPLAY_KEY, JSON.stringify(replays)) } catch {}
+}
+
+// Load the most recently saved run's replays.
+// Returns an array of per-wave replay objects, or null if none saved.
+export function loadRunReplay() {
+  try {
+    const raw = localStorage.getItem(REPLAY_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
 // ── Layout export / import (6.4 — grid snapshot sharing) ─────────────────────
 // Encodes only the non-structural tiles so the code stays short.
 // Format: base64 of "col,row:tileId|col,row:tileId|..."

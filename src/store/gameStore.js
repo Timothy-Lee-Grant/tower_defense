@@ -19,6 +19,14 @@ import {
 import {
   calcWaveScore, checkWaveAchievements, checkRunAchievements, getAchievement,
 } from '../game/scoring.js'
+import {
+  createRecorder, recordSnapshotIfDue, recordNotableEvent, finalizeRecorder,
+  getReplayFrame, getReplayEvents, getHighlights,
+} from '../game/replayEngine.js'
+import { saveRunReplay } from '../game/persistence.js'
+
+// ── Feature 16: module-level recorder (non-reactive — mutated per tick) ───────
+let _activeReplayRecorder = null
 
 // ── Feature 14.1: Combo definitions ──────────────────────────────────────────
 // Each entry is checked against each hero_killed event in the RAF loop.
@@ -91,6 +99,7 @@ export const PHASE = {
   MENU: 'menu', CAMPAIGN: 'campaign',
   PLAN: 'plan', WAVE: 'wave', RESULTS: 'results',
   VICTORY: 'victory', ENDLESS: 'endless_results',
+  REPLAY: 'replay',   // Feature 16
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
@@ -189,6 +198,16 @@ export const useGameStore = create((set, get) => ({
   tileSwapCounts:              {},    // "col,row" → times the tile was removed this plan phase
   leaderboardRank:             null,  // 1-based rank of this run's score (null if not top-5)
 
+  // ── Feature 16: Replay ───────────────────────────────────────────────────────
+  runReplays:          [],   // finalized per-wave replays for the current run
+  replayWaveIndex:     0,    // which wave is being replayed (waveIndex value)
+  replayPlayhead:      0,    // current ms position in the replay
+  replayPlaybackSpeed: 1,    // 1, 2, or 4
+  replayPlaying:       false,
+  replayHeroes:        [],   // hero array fed to DungeonGrid during PHASE.REPLAY
+  replayGrid:          [],   // grid fed to DungeonGrid during PHASE.REPLAY
+  replayBattleLog:     [],   // log entries emitted during playback
+
   // Plan-phase analysis overlays (reset to false when wave starts)
   showPathPreview: false,
   showCoverageMap: false,
@@ -250,7 +269,10 @@ export const useGameStore = create((set, get) => ({
       minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
       layeredDefenseKilled: false, rockBottomReached: false,
       oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
+      // Feature 16 reset
+      runReplays: [], replayPlaying: false,
     })
+    _activeReplayRecorder = null
   },
 
   // ── Endless mode ────────────────────────────────────────────────────────────
@@ -267,6 +289,7 @@ export const useGameStore = create((set, get) => ({
     const diff       = DIFFICULTIES[get().difficulty] ?? DIFFICULTIES.medium
     const pending    = get().pendingLayout
     const layoutData = get().layoutData
+    _activeReplayRecorder = null  // Feature 16: clear any stale recorder
     set({
       phase:          PHASE.PLAN,
       campaignNodeId: null,
@@ -298,6 +321,8 @@ export const useGameStore = create((set, get) => ({
       minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
       layeredDefenseKilled: false, rockBottomReached: false,
       oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
+      // Feature 16 reset
+      runReplays: [], replayPlaying: false,
     })
   },
 
@@ -652,6 +677,9 @@ export const useGameStore = create((set, get) => ({
     })
 
     audio.play('wave_start')
+
+    // ── Feature 16: start replay recorder ────────────────────────────────────
+    _activeReplayRecorder = createRecorder(waveIndex, get().difficulty, get().grid, heroes, waveConfig)
 
     // Build initial battle log with event announcement
     const initLog = [`⚔ Wave ${waveIndex + 1}: ${waveConfig.label}`]
@@ -1080,6 +1108,17 @@ export const useGameStore = create((set, get) => ({
         comboBonusGold:              comboBonusGoldAcc,
       })
 
+      // ── Feature 16: replay recording ──────────────────────────────────────
+      recordSnapshotIfDue(_activeReplayRecorder, waveElapsed, enrichedHeroes)
+      result.events.forEach(ev => {
+        // For treasure_reached: attach the just-updated treasureHp so highlights
+        // can identify the "closest call" moment.
+        const enriched = ev.type === 'treasure_reached'
+          ? { ...ev, treasureHpSnapshot: newTreasureHp }
+          : ev
+        recordNotableEvent(_activeReplayRecorder, waveElapsed, enriched)
+      })
+
       // Handle boulder self-destruction (one-shot trap)
       // Iron Crusher (T3 boulder) has boulderRespawn — don't remove those
       const boulderEvents = result.events.filter(e => e.type === 'trap_triggered' && e.trap === 'boulder')
@@ -1235,6 +1274,20 @@ export const useGameStore = create((set, get) => ({
     const candidateIds = checkWaveAchievements(achievementState)
     const newlyUnlocked = candidateIds.filter(id => unlockAchievement(id))
 
+    // ── Feature 16: finalize wave replay ─────────────────────────────────────
+    if (_activeReplayRecorder) {
+      const finalized = finalizeRecorder(_activeReplayRecorder, waveElapsedMs, {
+        heroesKilled,
+        heroesEscaped: heroesEscapedWithGold + (get().heroesEscapedEmpty ?? 0),
+        waveScore,
+        treasureHpEnd: treasureHp,
+      })
+      if (finalized) {
+        set({ runReplays: [...get().runReplays, finalized] })
+      }
+      _activeReplayRecorder = null
+    }
+
     set({
       waveScore,
       runScore:              newRunScore,
@@ -1379,6 +1432,115 @@ export const useGameStore = create((set, get) => ({
     } else {
       set({ phase: PHASE.PLAN, waveIndex: nextWaveIndex, upgradeCards: [], heroes: [] })
       writeSave(SAVE_SLOTS.auto, get())
+    }
+  },
+
+  // ── Feature 16: Replay actions ─────────────────────────────────────────────
+
+  startReplay() {
+    const { runReplays } = get()
+    if (runReplays.length === 0) return
+    // Start at the last recorded wave
+    const lastReplay = runReplays[runReplays.length - 1]
+    // Persist replays to localStorage so the user can reload and still view them
+    saveRunReplay(runReplays)
+    set({
+      phase:               PHASE.REPLAY,
+      replayWaveIndex:     lastReplay.waveIndex,
+      replayPlayhead:      0,
+      replayPlaybackSpeed: 1,
+      replayPlaying:       true,
+      replayGrid:          lastReplay.grid,
+      replayHeroes:        getReplayFrame(lastReplay, 0),
+      replayBattleLog:     [],
+    })
+  },
+
+  stopReplay() {
+    set({ phase: PHASE.VICTORY, replayPlaying: false })
+  },
+
+  setReplayWave(waveIndex) {
+    const { runReplays } = get()
+    const replay = runReplays.find(r => r.waveIndex === waveIndex)
+    if (!replay) return
+    set({
+      replayWaveIndex: waveIndex,
+      replayPlayhead:  0,
+      replayPlaying:   false,
+      replayGrid:      replay.grid,
+      replayHeroes:    getReplayFrame(replay, 0),
+      replayBattleLog: [],
+    })
+  },
+
+  seekReplay(ms) {
+    const { runReplays, replayWaveIndex } = get()
+    const replay = runReplays.find(r => r.waveIndex === replayWaveIndex)
+    if (!replay) return
+    const clamped = Math.max(0, Math.min(ms, replay.waveDuration ?? 0))
+    set({
+      replayPlayhead: clamped,
+      replayHeroes:   getReplayFrame(replay, clamped),
+    })
+  },
+
+  tickReplay(deltaMs) {
+    const { runReplays, replayWaveIndex, replayPlayhead, replayPlaybackSpeed, replayPlaying } = get()
+    if (!replayPlaying) return
+    const replay = runReplays.find(r => r.waveIndex === replayWaveIndex)
+    if (!replay) return
+    const duration = replay.waveDuration ?? 0
+    const advance  = deltaMs * replayPlaybackSpeed
+    const newT     = Math.min(replayPlayhead + advance, duration)
+    const newHeroes = getReplayFrame(replay, newT)
+
+    // Emit log entries for events in this delta window
+    const freshEvents = getReplayEvents(replay, newT, advance + 50)
+    const logLines = freshEvents.map(ev => {
+      if (ev.type === 'hero_killed')
+        return ev.hadGold
+          ? `⚔️ ${ev.label} slain while fleeing!`
+          : `⚔️ ${ev.label} defeated`
+      if (ev.type === 'treasure_reached') return `💰 ${ev.label} grabbed the gold`
+      if (ev.type === 'hero_escaped')
+        return ev.hadGold ? `🏃 ${ev.label} escaped WITH gold!` : `💨 ${ev.label} fled`
+      if (ev.type === 'trap_triggered')
+        return `⚡ ${ev.label} hit a ${ev.trap}`
+      if (ev.type === 'boss_enraged') return `🔥 ${ev.label} ENRAGES!`
+      if (ev.type === 'medic_revived') return `➕ ${ev.label} revived`
+      return null
+    }).filter(Boolean)
+
+    set({
+      replayPlayhead:  newT,
+      replayHeroes:    newHeroes,
+      replayPlaying:   newT < duration,
+      replayBattleLog: logLines.length > 0
+        ? [...get().replayBattleLog.slice(-30), ...logLines]
+        : get().replayBattleLog,
+    })
+  },
+
+  setReplaySpeed(speed) {
+    set({ replayPlaybackSpeed: speed })
+  },
+
+  toggleReplayPlay() {
+    const { replayPlaying, runReplays, replayWaveIndex, replayPlayhead } = get()
+    const replay = runReplays.find(r => r.waveIndex === replayWaveIndex)
+    if (!replay) return
+    const atEnd = replayPlayhead >= (replay.waveDuration ?? 0)
+    if (!replayPlaying && atEnd) {
+      // Restart from beginning
+      set({
+        replayPlayhead:  0,
+        replayPlaying:   true,
+        replayHeroes:    getReplayFrame(replay, 0),
+        replayBattleLog: [],
+      })
+    } else {
+      set({ replayPlaying: !replayPlaying })
     }
   },
 }))

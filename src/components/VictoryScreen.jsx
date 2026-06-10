@@ -17,6 +17,8 @@ export default function VictoryScreen() {
   const goToMenu           = useGameStore(s => s.goToMenu)
   const startEndlessMode   = useGameStore(s => s.startEndlessMode)
   const goToCampaign       = useGameStore(s => s.goToCampaign)
+  const startReplay        = useGameStore(s => s.startReplay)
+  const runReplays         = useGameStore(s => s.runReplays)
   const campaignNodeId     = useGameStore(s => s.campaignNodeId)
   const isEndlessMode      = useGameStore(s => s.isEndlessMode)
 
@@ -109,6 +111,11 @@ export default function VictoryScreen() {
           {campaignNodeId && (
             <button style={s.campaignBtn} onClick={goToCampaign}>
               🗺 Campaign Map
+            </button>
+          )}
+          {runReplays.length > 0 && (
+            <button style={s.replayBtn} onClick={startReplay} title="Watch the run replay">
+              ▶ Watch Replay
             </button>
           )}
           <button style={s.btn} onClick={goToMenu}>
@@ -264,6 +271,13 @@ const s = {
   campaignBtn: {
     background: 'rgba(200,160,72,0.10)', color: '#c8a048',
     border: '1px solid rgba(200,160,72,0.3)', borderRadius: 6,
+    padding: '0.65rem 1.4rem',
+    fontSize: '0.85rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
+    cursor: 'pointer', letterSpacing: '0.04em',
+  },
+  replayBtn: {
+    background: 'rgba(80,140,220,0.10)', color: '#7aaee8',
+    border: '1px solid rgba(80,140,220,0.3)', borderRadius: 6,
     padding: '0.65rem 1.4rem',
     fontSize: '0.85rem', fontFamily: "'Cinzel', serif", fontWeight: 700,
     cursor: 'pointer', letterSpacing: '0.04em',

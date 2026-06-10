@@ -66,8 +66,14 @@ export default function DungeonGrid({ onTileClick, onTileRightClick }) {
 
   // Store subscriptions
   const phase         = useGameStore(s => s.phase)
-  const grid          = useGameStore(s => s.grid)
-  const heroes        = useGameStore(s => s.heroes)
+  const liveGrid      = useGameStore(s => s.grid)
+  const liveHeroes    = useGameStore(s => s.heroes)
+  const replayGrid    = useGameStore(s => s.replayGrid)
+  const replayHeroes  = useGameStore(s => s.replayHeroes)
+  // Feature 16: use replay data when in replay mode
+  const isReplay      = phase === PHASE.REPLAY
+  const grid          = isReplay ? replayGrid   : liveGrid
+  const heroes        = isReplay ? replayHeroes : liveHeroes
   const selectedTool  = useGameStore(s => s.selectedTool)
   const attackFlashes = useGameStore(s => s.attackFlashes)
   const screenShake      = useGameStore(s => s.screenShake)

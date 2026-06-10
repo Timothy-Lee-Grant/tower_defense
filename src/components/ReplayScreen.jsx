@@ -1,0 +1,367 @@
+import React, { useEffect, useRef, useState } from 'react'
+import { useGameStore, PHASE } from '../store/gameStore.js'
+import { getHighlights } from '../game/replayEngine.js'
+import DungeonGrid from './DungeonGrid.jsx'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtTime(ms) {
+  const sec = Math.floor((ms ?? 0) / 1000)
+  const min = Math.floor(sec / 60)
+  return `${min}:${String(sec % 60).padStart(2, '0')}`
+}
+
+// ── ReplayScreen ──────────────────────────────────────────────────────────────
+
+export default function ReplayScreen() {
+  const runReplays         = useGameStore(s => s.runReplays)
+  const replayWaveIndex    = useGameStore(s => s.replayWaveIndex)
+  const replayPlayhead     = useGameStore(s => s.replayPlayhead)
+  const replayPlaybackSpeed = useGameStore(s => s.replayPlaybackSpeed)
+  const replayPlaying      = useGameStore(s => s.replayPlaying)
+  const replayBattleLog    = useGameStore(s => s.replayBattleLog)
+  const tickReplay         = useGameStore(s => s.tickReplay)
+  const setReplayWave      = useGameStore(s => s.setReplayWave)
+  const seekReplay         = useGameStore(s => s.seekReplay)
+  const setReplaySpeed     = useGameStore(s => s.setReplaySpeed)
+  const toggleReplayPlay   = useGameStore(s => s.toggleReplayPlay)
+  const stopReplay         = useGameStore(s => s.stopReplay)
+
+  const currentReplay = runReplays.find(r => r.waveIndex === replayWaveIndex) ?? null
+  const duration      = currentReplay?.waveDuration ?? 0
+  const highlights    = currentReplay ? getHighlights(currentReplay) : []
+
+  // Battle log scroll-to-bottom
+  const logRef = useRef(null)
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [replayBattleLog])
+
+  // RAF loop — advance playhead while replayPlaying
+  const rafRef   = useRef(null)
+  const lastRef  = useRef(null)
+
+  useEffect(() => {
+    const tick = (now) => {
+      if (lastRef.current !== null) {
+        const delta = Math.min(now - lastRef.current, 100)
+        tickReplay(delta)
+      }
+      lastRef.current = now
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      lastRef.current = null
+    }
+  }, [tickReplay])
+
+  // Wave selector labels
+  const waveLabels = runReplays.map(r => ({
+    waveIndex: r.waveIndex,
+    label:     r.waveConfig?.label ?? `Wave ${r.waveIndex + 1}`,
+    wave:      r.waveConfig?.wave  ?? (r.waveIndex + 1),
+  }))
+
+  const pct = duration > 0 ? (replayPlayhead / duration) * 100 : 0
+
+  const speedOptions = [1, 2, 4]
+
+  return (
+    <div style={s.root}>
+      {/* Header */}
+      <div style={s.header}>
+        <button style={s.backBtn} onClick={stopReplay}>
+          ← Victory Screen
+        </button>
+        <div style={s.headerTitle}>⏪ Replay Viewer</div>
+        <div style={s.statsChip}>
+          {currentReplay && (
+            <>
+              {currentReplay.stats?.heroesKilled ?? 0} kills ·{' '}
+              {currentReplay.stats?.waveScore?.toLocaleString() ?? 0} pts
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Wave tabs */}
+      {waveLabels.length > 1 && (
+        <div style={s.waveTabs}>
+          {waveLabels.map(wl => (
+            <button
+              key={wl.waveIndex}
+              style={{
+                ...s.waveTab,
+                ...(wl.waveIndex === replayWaveIndex ? s.waveTabActive : {}),
+              }}
+              onClick={() => setReplayWave(wl.waveIndex)}
+            >
+              W{wl.wave}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Main content: canvas + battle log */}
+      <div style={s.body}>
+        {/* Canvas */}
+        <div style={s.canvasWrapper}>
+          {runReplays.length === 0 ? (
+            <div style={s.noData}>No replay data available.</div>
+          ) : (
+            <DungeonGrid onTileClick={() => {}} onTileRightClick={() => {}} />
+          )}
+        </div>
+
+        {/* Right sidebar: battle log + highlights */}
+        <div style={s.sidebar}>
+          <div style={s.sideSection}>
+            <div style={s.sideSectionLabel}>Battle Log</div>
+            <div ref={logRef} style={s.battleLog}>
+              {replayBattleLog.length === 0
+                ? <div style={s.logEmpty}>Events will appear here during playback.</div>
+                : replayBattleLog.map((line, i) => (
+                  <div key={i} style={s.logLine}>{line}</div>
+                ))
+              }
+            </div>
+          </div>
+
+          {highlights.length > 0 && (
+            <div style={s.sideSection}>
+              <div style={s.sideSectionLabel}>✨ Highlights</div>
+              {highlights.map((hl, i) => (
+                <button
+                  key={i}
+                  style={s.hlBtn}
+                  onClick={() => seekReplay(hl.t)}
+                  title={hl.description}
+                >
+                  <span style={s.hlLabel}>{hl.label}</span>
+                  <span style={s.hlDesc}>{hl.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {currentReplay?.stats && (
+            <div style={s.sideSection}>
+              <div style={s.sideSectionLabel}>Wave Summary</div>
+              <div style={s.statGrid}>
+                <StatPair label="Kills"    value={currentReplay.stats.heroesKilled} />
+                <StatPair label="Escaped"  value={currentReplay.stats.heroesEscaped} />
+                <StatPair label="Score"    value={(currentReplay.stats.waveScore ?? 0).toLocaleString()} />
+                <StatPair label="Duration" value={fmtTime(duration)} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Playback controls */}
+      <div style={s.controls}>
+        {/* Play / Pause */}
+        <button style={s.playBtn} onClick={toggleReplayPlay}>
+          {replayPlaying ? '⏸' : '▶'}
+        </button>
+
+        {/* Time display */}
+        <span style={s.timeLabel}>
+          {fmtTime(replayPlayhead)} / {fmtTime(duration)}
+        </span>
+
+        {/* Scrubber */}
+        <div style={s.scrubberTrack} onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const frac = (e.clientX - rect.left) / rect.width
+          seekReplay(Math.round(frac * duration))
+        }}>
+          <div style={{ ...s.scrubberFill, width: `${pct}%` }} />
+          <div style={{ ...s.scrubberThumb, left: `calc(${pct}% - 7px)` }} />
+        </div>
+
+        {/* Speed selector */}
+        <div style={s.speedGroup}>
+          {speedOptions.map(sp => (
+            <button
+              key={sp}
+              style={{
+                ...s.speedBtn,
+                ...(replayPlaybackSpeed === sp ? s.speedBtnActive : {}),
+              }}
+              onClick={() => setReplaySpeed(sp)}
+            >
+              {sp}×
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatPair({ label, value }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', padding: '0.2rem 0' }}>
+      <span style={{ fontFamily: "'Cinzel', serif", fontSize: '0.58rem', letterSpacing: '0.08em',
+        color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label}</span>
+      <span style={{ fontFamily: "'Cinzel', serif", fontSize: '0.7rem', color: 'var(--gold-bright)' }}>{value}</span>
+    </div>
+  )
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = {
+  root: {
+    width: '100%', height: '100%',
+    display: 'flex', flexDirection: 'column',
+    background: 'radial-gradient(ellipse at 50% 20%, #13101a 0%, #0d0b0e 70%)',
+    overflow: 'hidden',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: '1rem',
+    padding: '0.5rem 1rem',
+    borderBottom: '1px solid rgba(232,196,74,0.12)',
+    flexShrink: 0,
+  },
+  backBtn: {
+    background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 5,
+    padding: '0.35rem 0.8rem', fontSize: '0.72rem',
+    fontFamily: "'Cinzel', serif", cursor: 'pointer', letterSpacing: '0.04em',
+  },
+  headerTitle: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.85rem', fontWeight: 700,
+    color: 'var(--gold-bright)', letterSpacing: '0.06em',
+    flex: 1,
+  },
+  statsChip: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.82rem', color: 'var(--text-secondary)',
+  },
+  // Wave tabs
+  waveTabs: {
+    display: 'flex', gap: '2px', padding: '0.3rem 1rem',
+    background: 'rgba(0,0,0,0.2)', flexShrink: 0, flexWrap: 'wrap',
+  },
+  waveTab: {
+    background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)',
+    border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4,
+    padding: '0.2rem 0.55rem', fontSize: '0.62rem',
+    fontFamily: "'Cinzel', serif", cursor: 'pointer', letterSpacing: '0.05em',
+  },
+  waveTabActive: {
+    background: 'rgba(232,196,74,0.15)', color: 'var(--gold-bright)',
+    border: '1px solid rgba(232,196,74,0.35)',
+  },
+  // Body
+  body: {
+    flex: 1, display: 'flex', overflow: 'hidden',
+  },
+  canvasWrapper: {
+    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', position: 'relative',
+  },
+  noData: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    color: 'var(--text-muted)', fontSize: '1rem',
+  },
+  // Right sidebar
+  sidebar: {
+    width: 240, flexShrink: 0,
+    borderLeft: '1px solid rgba(255,255,255,0.06)',
+    display: 'flex', flexDirection: 'column', gap: '0', overflow: 'hidden',
+  },
+  sideSection: {
+    padding: '0.6rem 0.75rem',
+    borderBottom: '1px solid rgba(255,255,255,0.05)',
+  },
+  sideSectionLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.56rem', letterSpacing: '0.12em',
+    color: 'var(--gold-dim)', textTransform: 'uppercase', marginBottom: '0.4rem',
+  },
+  battleLog: {
+    height: 200, overflowY: 'auto',
+    display: 'flex', flexDirection: 'column', gap: '2px',
+  },
+  logEmpty: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.75rem', color: 'var(--text-muted)',
+  },
+  logLine: {
+    fontFamily: "'Crimson Text', serif", fontSize: '0.76rem',
+    color: 'var(--text-secondary)', lineHeight: 1.35,
+  },
+  // Highlights
+  hlBtn: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1px',
+    width: '100%', background: 'rgba(255,210,60,0.05)',
+    border: '1px solid rgba(255,210,60,0.15)', borderRadius: 5,
+    padding: '0.35rem 0.55rem', cursor: 'pointer', marginBottom: '0.3rem',
+    textAlign: 'left',
+  },
+  hlLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.63rem', fontWeight: 700,
+    color: 'var(--gold-bright)', letterSpacing: '0.04em',
+  },
+  hlDesc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.3,
+  },
+  // Stat grid
+  statGrid: {
+    display: 'flex', flexDirection: 'column',
+  },
+  // Playback controls
+  controls: {
+    display: 'flex', alignItems: 'center', gap: '0.75rem',
+    padding: '0.55rem 1rem',
+    borderTop: '1px solid rgba(232,196,74,0.12)',
+    background: 'rgba(0,0,0,0.25)', flexShrink: 0,
+  },
+  playBtn: {
+    background: 'rgba(232,196,74,0.12)', color: 'var(--gold-bright)',
+    border: '1px solid rgba(232,196,74,0.3)', borderRadius: 5,
+    width: 36, height: 36, fontSize: '1rem', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  timeLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.65rem',
+    color: 'var(--text-secondary)', letterSpacing: '0.06em',
+    minWidth: '7rem', flexShrink: 0,
+  },
+  scrubberTrack: {
+    flex: 1, height: 6, borderRadius: 3,
+    background: 'rgba(255,255,255,0.1)', cursor: 'pointer',
+    position: 'relative',
+  },
+  scrubberFill: {
+    position: 'absolute', top: 0, left: 0, height: '100%',
+    background: 'var(--gold-mid)', borderRadius: 3,
+    pointerEvents: 'none',
+  },
+  scrubberThumb: {
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    width: 14, height: 14, borderRadius: '50%',
+    background: 'var(--gold-bright)',
+    border: '2px solid #0d0b0e',
+    pointerEvents: 'none',
+  },
+  speedGroup: {
+    display: 'flex', gap: '2px', flexShrink: 0,
+  },
+  speedBtn: {
+    background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
+    padding: '0.2rem 0.5rem', fontSize: '0.65rem',
+    fontFamily: "'Cinzel', serif", cursor: 'pointer', letterSpacing: '0.04em',
+  },
+  speedBtnActive: {
+    background: 'rgba(232,196,74,0.15)', color: 'var(--gold-bright)',
+    border: '1px solid rgba(232,196,74,0.35)',
+  },
+}

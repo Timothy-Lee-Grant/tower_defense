@@ -5,6 +5,7 @@ import GameScreen from './components/GameScreen.jsx'
 import ResultsScreen from './components/ResultsScreen.jsx'
 import VictoryScreen from './components/VictoryScreen.jsx'
 import CampaignMap from './components/CampaignMap.jsx'
+import ReplayScreen from './components/ReplayScreen.jsx'
 
 export default function App() {
   const phase = useGameStore(s => s.phase)
@@ -16,6 +17,7 @@ export default function App() {
       {(phase === PHASE.PLAN || phase === PHASE.WAVE) && <GameScreen />}
       {phase === PHASE.RESULTS      && <ResultsScreen />}
       {phase === PHASE.VICTORY      && <VictoryScreen />}
+      {phase === PHASE.REPLAY       && <ReplayScreen />}
     </div>
   )
 }
