@@ -229,6 +229,7 @@ export const useGameStore = create((set, get) => ({
       layoutData,
       grid:            makeGridFromLayout(layoutData),
       gold:            diff.startingGold,
+      waveStartGold:   diff.startingGold,
       bank:            0,
       waveIndex:       0,
       tileUpgrades:    {},
@@ -274,6 +275,7 @@ export const useGameStore = create((set, get) => ({
       endlessWave:    0,
       grid:  pending ?? makeGridFromLayout(layoutData),
       gold:  diff.startingGold,
+      waveStartGold: diff.startingGold,  // wave 1 budget
       bank:  0,
       waveIndex: 0,
       tileUpgrades: {},
@@ -356,7 +358,7 @@ export const useGameStore = create((set, get) => ({
       activeGlobalEvent: null, showEventOverlay: false, caveInTiles: [], holyGroundZone: null,
       heroMemory: saveData.heroMemory ?? { trapTriggersByTile: {}, warlordDestroyCount: 0 },
       // Feature 15 reset (scores do not carry across load)
-      waveScore: 0, runScore: 0, waveStartGold: 0, goldSpentThisWave: 0, comboBonusGold: 0,
+      waveScore: 0, runScore: 0, waveStartGold: saveData.gold, goldSpentThisWave: 0, comboBonusGold: 0,
       minTreasureHpThisRun: null, newlyUnlockedAchievements: [],
       layeredDefenseKilled: false, rockBottomReached: false,
       oopsTriggered: false, hiredWrongMonstersTriggered: false, tileSwapCounts: {},
@@ -669,9 +671,6 @@ export const useGameStore = create((set, get) => ({
       )
     }
 
-    // Feature 15: capture gold available at wave start for efficiency calculation
-    const waveStartGold = get().gold
-
     set({
       phase:           PHASE.WAVE,
       heroes,
@@ -709,7 +708,7 @@ export const useGameStore = create((set, get) => ({
       bestComboThisWave:          null,
       // Feature 15: wave-level score + achievement tracking (also reset leaderboard rank)
       leaderboardRank:             null,
-      waveStartGold,
+      // waveStartGold is NOT reset here — it's set in endWave/startGame to the plan budget
       goldSpentThisWave:           0,  // computed in endWave
       comboBonusGold:              0,
       newlyUnlockedAchievements:   [],
@@ -1300,6 +1299,7 @@ export const useGameStore = create((set, get) => ({
       simulationRef: null,
       upgradeCards:  finalCards,
       gold:          baseGold,
+      waveStartGold: baseGold,  // budget for NEXT wave's plan phase (efficiency calc)
       attackFlashes: [],
     })
   },

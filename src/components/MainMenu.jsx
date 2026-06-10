@@ -8,8 +8,9 @@ import { audio } from '../audio/audioEngine.js'
 import { MENU_QUIPS } from '../game/gerald.js'
 import {
   listSaves, deleteSave, readStats, favoriteTool,
-  relativeTime, decodeLayout,
+  relativeTime, decodeLayout, readLeaderboard, readAchievements,
 } from '../game/persistence.js'
+import { ACHIEVEMENTS } from '../game/scoring.js'
 
 function buildEmptyGrid() {
   const grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(TILE.EMPTY))
@@ -38,6 +39,18 @@ export default function MainMenu() {
   const [stats] = useState(() => readStats())
   const favTool  = favoriteTool(stats)
   const DIFFICULTY_LABELS = { easy: '🌿 Easy', medium: '⚔ Medium', hard: '🔥 Hard' }
+
+  // Feature 15: leaderboard + achievements
+  const [leaderboard]       = useState(() => readLeaderboard())
+  const [unlockedIds]       = useState(() => readAchievements())
+  const [showAchievements,  setShowAchievements]  = useState(false)
+  const [showLeaderboard,   setShowLeaderboard]   = useState(false)
+  const [lbDifficulty,      setLbDifficulty]      = useState('medium')
+
+  const unlockedCount = ACHIEVEMENTS.filter(a => unlockedIds.has(a.id)).length
+  const hasLeaderboard = Object.values(leaderboard).some(arr => arr.length > 0)
+  const RANK_LABELS = ['🥇', '🥈', '🥉', '4th', '5th']
+  const DIFF_LABELS = { easy: '🌿 Easy', medium: '⚔ Medium', hard: '🔥 Hard' }
 
   // Layout import
   const [showImport,   setShowImport]   = useState(false)
@@ -210,6 +223,102 @@ export default function MainMenu() {
             </div>
           </div>
         )}
+
+        {/* ── Hall of Excellence leaderboard ── */}
+        {hasLeaderboard && (
+          <div style={styles.hallSection}>
+            <button
+              style={styles.hallToggle}
+              onClick={() => setShowLeaderboard(v => !v)}
+            >
+              🏆 Gerald's Hall of Excellence {showLeaderboard ? '▲' : '▼'}
+            </button>
+            {showLeaderboard && (
+              <div style={styles.hallPanel}>
+                {/* Difficulty tabs */}
+                <div style={styles.lbTabs}>
+                  {['easy','medium','hard'].map(d => (
+                    <button
+                      key={d}
+                      style={{
+                        ...styles.lbTab,
+                        borderBottom: lbDifficulty === d
+                          ? '2px solid var(--gold-bright)'
+                          : '2px solid transparent',
+                        color: lbDifficulty === d ? 'var(--gold-bright)' : 'var(--text-muted)',
+                      }}
+                      onClick={() => setLbDifficulty(d)}
+                    >
+                      {DIFF_LABELS[d]}
+                    </button>
+                  ))}
+                </div>
+                {(leaderboard[lbDifficulty] ?? []).length === 0 ? (
+                  <p style={styles.lbEmpty}>No runs recorded on {lbDifficulty} yet.</p>
+                ) : (
+                  <div style={styles.lbList}>
+                    {(leaderboard[lbDifficulty] ?? []).map((entry, i) => (
+                      <div key={i} style={styles.lbRow}>
+                        <span style={styles.lbRank}>{RANK_LABELS[i] ?? `#${i+1}`}</span>
+                        <span style={styles.lbScore}>{entry.score.toLocaleString()}</span>
+                        <span style={styles.lbMeta}>{entry.kills} kills · {entry.waves}w</span>
+                        <span style={styles.lbDate}>{new Date(entry.date).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p style={styles.hallNote}>
+                  "A dungeon is not measured by the heroes who enter, but by the heroes who do not leave."
+                  <br /><span style={{ color: 'var(--text-muted)' }}>— Gerald, quarterly report</span>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Achievements panel ── */}
+        <div style={styles.achieveSection}>
+          <button
+            style={styles.achieveToggle}
+            onClick={() => setShowAchievements(v => !v)}
+          >
+            🎖 Achievements — {unlockedCount} / {ACHIEVEMENTS.length} {showAchievements ? '▲' : '▼'}
+          </button>
+          {showAchievements && (
+            <div style={styles.achievePanel}>
+              {['strategic', 'quirky', 'endurance'].map(cat => (
+                <div key={cat} style={styles.achieveCat}>
+                  <div style={styles.achieveCatLabel}>
+                    {cat === 'strategic' ? '⚔ Strategic' : cat === 'quirky' ? '🎭 Quirky' : '🔥 Endurance'}
+                  </div>
+                  {ACHIEVEMENTS.filter(a => a.category === cat).map(a => {
+                    const unlocked = unlockedIds.has(a.id)
+                    return (
+                      <div key={a.id} style={{
+                        ...styles.achieveCard,
+                        opacity: unlocked ? 1 : 0.45,
+                      }}>
+                        <span style={styles.achieveEmoji}>{unlocked ? a.emoji : '🔒'}</span>
+                        <div style={styles.achieveText}>
+                          <span style={{
+                            ...styles.achieveName,
+                            color: unlocked ? 'var(--gold-bright)' : 'var(--text-muted)',
+                          }}>
+                            {a.name}
+                          </span>
+                          <span style={styles.achieveDesc}>
+                            {unlocked ? a.desc : a.hint}
+                          </span>
+                        </div>
+                        {unlocked && <span style={styles.achieveCheck}>✓</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── Layout import ── */}
         <div style={styles.importSection}>
@@ -456,6 +565,92 @@ const styles = {
   statItem:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' },
   statLabel: { fontFamily: "'Cinzel', serif", fontSize: '0.58rem', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' },
   statValue: { fontFamily: "'Crimson Text', serif", fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right' },
+  // ── Hall of Excellence ─────────────────────────────────────────────────────
+  hallSection: { width: '100%', maxWidth: 480 },
+  hallToggle: {
+    width: '100%', background: 'transparent', color: 'var(--gold-dim)',
+    border: '1px solid rgba(232,196,74,0.18)', borderRadius: 5,
+    padding: '0.38rem 0.75rem', fontFamily: "'Cinzel', serif", fontSize: '0.62rem',
+    letterSpacing: '0.08em', cursor: 'pointer',
+  },
+  hallPanel: {
+    marginTop: '0.5rem',
+    background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(232,196,74,0.1)',
+    borderRadius: 8, padding: '0.75rem',
+    display: 'flex', flexDirection: 'column', gap: '0.4rem',
+  },
+  lbTabs: { display: 'flex', gap: '0.25rem', marginBottom: '0.35rem' },
+  lbTab: {
+    flex: 1, background: 'transparent', border: 'none',
+    padding: '0.3rem', fontFamily: "'Cinzel', serif", fontSize: '0.58rem',
+    letterSpacing: '0.06em', cursor: 'pointer', textTransform: 'uppercase',
+  },
+  lbEmpty: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', margin: '0.5rem 0',
+  },
+  lbList: { display: 'flex', flexDirection: 'column', gap: '0.2rem' },
+  lbRow: {
+    display: 'flex', alignItems: 'center', gap: '0.6rem',
+    padding: '0.28rem 0.4rem', borderRadius: 4,
+    background: 'rgba(255,255,255,0.025)',
+  },
+  lbRank: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.7rem', fontWeight: 700,
+    color: 'var(--gold-bright)', minWidth: '2rem', textAlign: 'center',
+  },
+  lbScore: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.82rem', fontWeight: 700,
+    color: 'var(--bone)', minWidth: '4.5rem',
+  },
+  lbMeta: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.73rem', color: 'var(--text-secondary)', flex: 1,
+  },
+  lbDate: {
+    fontFamily: "'Crimson Text', serif", fontSize: '0.68rem',
+    color: 'var(--text-muted)',
+  },
+  hallNote: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.73rem', color: 'var(--text-muted)', textAlign: 'center',
+    lineHeight: 1.5, marginTop: '0.35rem',
+  },
+  // ── Achievements ────────────────────────────────────────────────────────────
+  achieveSection: { width: '100%', maxWidth: 480 },
+  achieveToggle: {
+    width: '100%', background: 'transparent', color: 'var(--text-muted)',
+    border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5,
+    padding: '0.35rem 0.75rem', fontFamily: "'Cinzel', serif", fontSize: '0.6rem',
+    letterSpacing: '0.08em', cursor: 'pointer',
+  },
+  achievePanel: {
+    marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
+  },
+  achieveCat: { display: 'flex', flexDirection: 'column', gap: '0.3rem' },
+  achieveCatLabel: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.55rem', letterSpacing: '0.14em',
+    color: 'var(--gold-dim)', textTransform: 'uppercase', marginBottom: '0.1rem',
+  },
+  achieveCard: {
+    display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: 6, padding: '0.45rem 0.6rem',
+  },
+  achieveEmoji: { fontSize: '1rem', flexShrink: 0, lineHeight: 1.2, marginTop: '0.05rem' },
+  achieveText: { display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1 },
+  achieveName: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.65rem', fontWeight: 700,
+    letterSpacing: '0.04em',
+  },
+  achieveDesc: {
+    fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
+    fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.35,
+  },
+  achieveCheck: {
+    fontFamily: "'Cinzel', serif", fontSize: '0.7rem',
+    color: '#60c060', flexShrink: 0, alignSelf: 'center',
+  },
   // Layout import
   importSection: { width: '100%', maxWidth: 480 },
   importToggle: {
